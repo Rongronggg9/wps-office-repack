@@ -1,0 +1,69 @@
+name: Repack
+
+on:
+  push: ~
+  workflow_dispatch: ~
+  schedule:
+    - cron: "30 22 * * *"
+
+jobs:
+  repack:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Set up Git
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Force renew if triggered manually
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: echo > .curr_version
+
+      - name: Repack
+        run: sh repack.sh
+
+      - name: Check worktree
+        id: check_worktree
+        run: |
+          echo "::set-output name=tag::v$(cat .curr_version)"
+          if [ -z "$(git status --porcelain)" ]; then
+            echo '::set-output name=clean::true'
+          else 
+            echo '::set-output name=clean::false'
+          fi
+
+      - name: Commit and push
+        if: ${{ steps.check_worktree.outputs.clean == 'false' }}
+        run: |
+          git commit -am "v$(cat .curr_version)"
+          git push
+
+      - name: Tag and push
+        if: ${{ steps.check_worktree.outputs.clean == 'false' || github.event_name == 'workflow_dispatch' }}
+        run: |
+          git tag -f "v$(cat .curr_version)"
+          git push -f --tags
+
+      - name: Fetch changelog
+        if: ${{ steps.check_worktree.outputs.clean == 'false' || github.event_name == 'workflow_dispatch' }}
+        run: |
+          export CHANGELOG_HTML="$(curl -sL 'https://linux.wps.cn/wpslinuxlog')"
+          echo "$CHANGELOG_HTML" | grep -Pzo '(?<=<div class="log_main">)[\s\S]*?(?=\s+</div>)' | \
+            head --bytes=-1 > build/CHANGELOG.html
+          sed -i 's/^[ \t]*//g' build/CHANGELOG.html
+          echo >> build/CHANGELOG.html
+
+      - uses: ncipollo/release-action@v1
+        if: ${{ steps.check_worktree.outputs.clean == 'false' || github.event_name == 'workflow_dispatch' }}
+        with:
+          allowUpdates: true
+          artifactErrorsFailBuild: true
+          artifacts: 'build/dist/*.deb'
+          bodyFile: 'build/CHANGELOG.html'
+          replacesArtifacts: true
+          tag: ${{ steps.check_worktree.outputs.tag }}
