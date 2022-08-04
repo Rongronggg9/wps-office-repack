@@ -25,7 +25,7 @@ jobs:
 
       - name: Force renew if triggered by push event or workflow dispatch
         if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' }}
-        run: echo > .curr_version
+        run: echo > .source.lock
 
       - name: Repack
         run: sh repack.sh
@@ -43,7 +43,8 @@ jobs:
       - name: Commit and push
         if: ${{ steps.check_worktree.outputs.clean == 'false' }}
         run: |
-          git commit -am "v$(cat .curr_version)"
+          git add -A
+          git commit -m "v$(cat .curr_version)"
           git push
 
       - name: Tag and push
