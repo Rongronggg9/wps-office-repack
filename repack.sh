@@ -185,13 +185,16 @@ EXTRACT_PATH_CHN="$EXTRACT_DIR/$CHN_DEB_TRIPLE"
 EXTRACT_PATH_INT="$EXTRACT_DIR/$INT_DEB_TRIPLE"
 
 download_and_extract "$INT_DEB_URL" "$INT_DEB_FILE" "$EXTRACT_PATH_INT" &
+pid_download_int=$!
 download_and_extract "$CHN_DEB_URL" "$CHN_DEB_FILE" "$EXTRACT_PATH_CHN" &
-wait
 
+wait $pid_download_int # build INT prefixed package immediately after INT deb is downloaded
 INT_PREFIXED_PATH="$REPACK_DIR/${INT_DEB_PKG_NAME}_${INT_DEB_VER}+${PREFIXED_VERSION_POSTFIX}_${INT_DEB_ARCH}"
 init_repack "$EXTRACT_PATH_INT" "$INT_PREFIXED_PATH"
 prefix_cmd "$INT_PREFIXED_PATH"
 build "+$PREFIXED_VERSION_POSTFIX" "$INT_PREFIXED_PATH"
+
+wait # wait for CHN download to finish. `build` cannot be parallelized or it will be even slower.
 
 CHN_PREFIXED_PATH="$REPACK_DIR/${CHN_DEB_PKG_NAME}_${CHN_DEB_VER}+${PREFIXED_VERSION_POSTFIX}_${CHN_DEB_ARCH}"
 init_repack "$EXTRACT_PATH_CHN" "$CHN_PREFIXED_PATH"
