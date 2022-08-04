@@ -1,7 +1,10 @@
 name: Repack
 
 on:
-  push: ~
+  push:
+    paths:
+      - repack.sh
+      - .github/workflows/repack.yml
   workflow_dispatch: ~
   schedule:
     - cron: "30 22 * * *"
