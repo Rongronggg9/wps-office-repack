@@ -56,9 +56,26 @@ jobs:
       - name: Fetch changelog
         if: ${{ steps.check_worktree.outputs.clean == 'false' || github.event_name == 'workflow_dispatch' || github.event_name == 'push' }}
         run: |
-          export CHANGELOG_HTML="$(curl -sL 'https://linux.wps.cn/wpslinuxlog')"
-          echo "$CHANGELOG_HTML" | grep -Pzo '(?<=<div class="log_main">)[\s\S]*?(?=\s+</div>)' | \
-            head --bytes=-1 > build/CHANGELOG.html
+          rm -f build/CHANGELOG.html
+          
+          echo '<details><summary><h1>CHN Changelog</h1></summary>' > build/CHANGELOG.html
+          echo >> build/CHANGELOG.html
+          curl -sL 'https://linux.wps.cn/wpslinuxlog' | \
+            grep -Pzo '(?<=<div class="log_main">)[\s\S]*?(?=\s*</div>)' | \
+            head --bytes=-1 >> build/CHANGELOG.html
+          echo >> build/CHANGELOG.html
+          echo '</details>' >> build/CHANGELOG.html
+          
+          echo >> build/CHANGELOG.html
+          
+          echo '<details><summary><h1>INT Changelog</h1></summary>' >> build/CHANGELOG.html
+          echo >> build/CHANGELOG.html
+          curl -sL 'https://www.wps.com/whatsnew/linux/' | \
+            grep -Pzo '<div class="nuxt-content"[^>]*>[\s\S]*?</div>' | \
+            head --bytes=-1 >> build/CHANGELOG.html
+          echo >> build/CHANGELOG.html
+          echo '</details>' >> build/CHANGELOG.html
+
           sed -i 's/^[ \t]*//g' build/CHANGELOG.html
           echo >> build/CHANGELOG.html
 
