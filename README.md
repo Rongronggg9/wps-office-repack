@@ -1,6 +1,6 @@
-# WPS Office International for Linux Repack
+# WPS Office for Linux Repack
 
-Repack WPS Office International for Linux to include `zh_CN` localization.
+Repack WPS Office for Linux to include `zh_CN` localization and/or prefixing commands.
 
 ## PROPRIETARY WARNING
 
