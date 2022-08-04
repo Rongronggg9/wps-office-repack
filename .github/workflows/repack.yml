@@ -33,7 +33,7 @@ jobs:
       - name: Check worktree
         id: check_worktree
         run: |
-          echo "::set-output name=tag::v$(cat .curr_version)"
+          echo "::set-output name=tag::v$(cat .source.lock | head -n 1)"
           if [ -z "$(git status --porcelain)" ]; then
             echo '::set-output name=clean::true'
           else 
@@ -44,13 +44,13 @@ jobs:
         if: ${{ steps.check_worktree.outputs.clean == 'false' }}
         run: |
           git add -A
-          git commit -m "v$(cat .curr_version)"
+          git commit -m '${{ steps.check_worktree.outputs.tag }}'
           git push
 
       - name: Tag and push
         if: ${{ steps.check_worktree.outputs.clean == 'false' || github.event_name == 'workflow_dispatch' || github.event_name == 'push' }}
         run: |
-          git tag -f "v$(cat .curr_version)"
+          git tag -f '${{ steps.check_worktree.outputs.tag }}'
           git push -f --tags
 
       - name: Fetch changelog

@@ -38,7 +38,7 @@ fetch_source() {
   echo "CHN deb url: $CHN_DEB_URL"
   echo "INT deb url: $INT_DEB_URL"
 
-  SOURCE_LOCK=$(printf 'CHN: %s\nINT: %s' "$CHN_DEB_URL" "$INT_DEB_URL")
+  SOURCE_LOCK=$(printf '%s\nCHN: %s\nINT: %s' "$LATEST_VERSION" "$CHN_DEB_URL" "$INT_DEB_URL")
 
   [ -f .source.lock ] || touch .source.lock
   PREVIOUS_SOURCE_LOCK=$(cat .source.lock)
