@@ -16,13 +16,13 @@ Unmodified Chinese version.
 
 Unmodified International version.
 
-### `mui`
+### `+mui`
 
 > Only International version needs localization injection.
 
 `zh_CN` localization injected.
 
-### `prefixed`
+### `+prefixed`
 
 All commands are prefixed with `wps` to prevent conflicts (e.g. https://github.com/MisterTea/EternalTerminal/issues/316).
 
