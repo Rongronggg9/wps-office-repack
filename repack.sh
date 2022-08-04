@@ -175,6 +175,7 @@ build() {
 }
 
 post() {
+  rm -f .source.lock
   echo "$SOURCE_LOCK" >.source.lock
 }
 
