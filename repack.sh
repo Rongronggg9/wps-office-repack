@@ -24,7 +24,7 @@ detach_hard_link() {
   mv -f "$1.tmp" "$1"
 }
 
-download() {
+fetch_source() {
   # CHN: https://wps-linux-personal.wpscdn.cn/wps/download/ep/Linux2019/11664/wps-office_11.1.0.11664_amd64.deb
   # INT: https://wdl1.pcfg.cache.wpscdn.com/wpsdl/wpsoffice/download/linux/11664/wps-office_11.1.0.11664.XA_amd64.deb
   echo 'Fetching latest version...'
@@ -44,22 +44,16 @@ download() {
 
   CHN_DEB_FILE="$DOWNLOAD_DIR/chn_${LATEST_VERSION}.deb"
   INT_DEB_FILE="$DOWNLOAD_DIR/int_${LATEST_VERSION}.deb"
+}
 
-  echo "Downloading CHN deb..."
-  if [ ! -f "$CHN_DEB_FILE" ]; then
-    wget --progress=dot:giga -O "$CHN_DEB_FILE" "$CHN_DEB_URL"
+download() {
+  # $1: url
+  # $2: file path
+  if [ ! -f "$2" ]; then
+    wget -q --show-progress --progress=bar:force:noscroll -O "$2" "$1"
   else
-    echo "CHN deb already exists, skipping..."
+    echo "$2 already exists, skipping..."
   fi
-
-  echo "Downloading INT deb..."
-  if [ ! -f "$INT_DEB_FILE" ]; then
-    wget --progress=dot:giga -O "$INT_DEB_FILE" "$INT_DEB_URL"
-  else
-    echo "INT deb already exists, skipping..."
-  fi
-
-  echo "Done."
 }
 
 extract() {
@@ -81,18 +75,26 @@ extract() {
   mkdir -p "$2"
   dpkg-deb -R "$1" "$2/"
 
-  echo "Done."
+  echo "Extracted $1 to $2."
+}
+
+download_and_extract() {
+  ### $1: url
+  ### $2: file path
+  ### $3: extract path
+  download "$1" "$2"
+  extract "$2" "$3"
 }
 
 init_repack() {
   ### $1: base path
   ### $2: repack path
-  echo "Initializing repack $2..."
+  echo "Initializing repack $2 from $1..."
   rm -rf "$2"
   mkdir -p "$2"
   # create hard links
   cp -alT "$1/" "$2"
-  echo "Done."
+  echo "Initialized repack $2 from $1."
 }
 
 inject_l10n() {
@@ -113,11 +115,13 @@ inject_l10n() {
   mkdir -p "$2$L10N_PATH"
   cp -al "$1$L10N_PATH" "$2$L10N_PATH"
 
-  echo "Done."
+  echo "Injected l10n from $1 to $2..."
 }
 
 prefix_cmd() {
   ### $1: repack path
+  echo "Prefixing all commands in $1..."
+
   for componet in "et" "wpp"; do
     path_bin="/usr/bin/$componet"
     new_path_bin="/usr/bin/wps$componet"
@@ -132,6 +136,8 @@ prefix_cmd() {
       exit 1
     fi
   done
+
+  echo "Prefixed all commands in $1."
 }
 
 build() {
@@ -150,47 +156,33 @@ build() {
   # build package
   dpkg-deb -z9 -b "$2/" "$BUILD_DIR"
 
-  echo "Done."
+  echo "Built $2."
 }
 
 post() {
   echo "$LATEST_VERSION" >.curr_version
 }
 
-download
-echo
+fetch_source
 
 EXTRACT_PATH_CHN="$EXTRACT_DIR/chn_$LATEST_VERSION"
 EXTRACT_PATH_INT="$EXTRACT_DIR/int_$LATEST_VERSION"
 
-extract "$CHN_DEB_FILE" "$EXTRACT_PATH_CHN"
-echo
-
-extract "$INT_DEB_FILE" "$EXTRACT_PATH_INT"
-echo
+download_and_extract "$INT_DEB_URL" "$INT_DEB_FILE" "$EXTRACT_PATH_INT" &
+download_and_extract "$CHN_DEB_URL" "$CHN_DEB_FILE" "$EXTRACT_PATH_CHN" &
+wait
 
 REPACK_PATH="$REPACK_DIR/$LATEST_VERSION-$REPACK_VERSION_POSTFIX"
-
-init_repack "$EXTRACT_PATH_INT" "$REPACK_PATH"
-echo
-
-inject_l10n "$EXTRACT_PATH_CHN" "$REPACK_PATH"
-echo
-
 REPACK_PREFIXED_PATH="$REPACK_DIR/$LATEST_VERSION-$REPACK_PREFIXED_VERSION_POSTFIX"
 
+init_repack "$EXTRACT_PATH_INT" "$REPACK_PATH"
+inject_l10n "$EXTRACT_PATH_CHN" "$REPACK_PATH"
+
 init_repack "$REPACK_PATH" "$REPACK_PREFIXED_PATH"
-echo
-
 prefix_cmd "$REPACK_PREFIXED_PATH"
-echo
 
+# no need to parallelize build, it is already multi-threaded
 build "$REPACK_VERSION_POSTFIX" "$REPACK_PATH"
-echo
-
 build "$REPACK_PREFIXED_VERSION_POSTFIX" "$REPACK_PREFIXED_PATH"
-echo
-
-wait
 
 post
