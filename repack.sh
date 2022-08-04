@@ -13,8 +13,8 @@ INT_CDN='https://wdl1.pcfg.cache.wpscdn.com'
 
 L10N_PATH='/opt/kingsoft/wps-office/office6/mui/zh_CN'
 
-REPACK_VERSION_POSTFIX='repack'
-REPACK_PREFIXED_VERSION_POSTFIX='repack+prefixed'
+MUI_VERSION_POSTFIX='mui'
+PREFIXED_VERSION_POSTFIX='prefixed'
 
 mkdir -p $DOWNLOAD_DIR $EXTRACT_DIR $REPACK_DIR $BUILD_DIR
 
@@ -35,15 +35,30 @@ fetch_source() {
   INT_DEB_URL="$INT_CDN/wpsdl/wpsoffice/download/linux/$LATEST_BUILD/wps-office_$LATEST_VERSION.XA_amd64.deb"
 
   echo "Latest version: $LATEST_VERSION"
+  echo "CHN deb url: $CHN_DEB_URL"
+  echo "INT deb url: $INT_DEB_URL"
 
-  PREVIOUS_VERSION=$(cat .curr_version)
-  if [ "$LATEST_VERSION" = "$PREVIOUS_VERSION" ]; then
+  SOURCE_LOCK=$(printf 'CHN: %s\nINT: %s' "$CHN_DEB_URL" "$INT_DEB_URL")
+
+  [ -f .source.lock ] || touch .source.lock
+  PREVIOUS_SOURCE_LOCK=$(cat .source.lock)
+  if [ "$SOURCE_LOCK" = "$PREVIOUS_SOURCE_LOCK" ]; then
     echo "No new version found."
     exit 0
   fi
 
-  CHN_DEB_FILE="$DOWNLOAD_DIR/chn_${LATEST_VERSION}.deb"
-  INT_DEB_FILE="$DOWNLOAD_DIR/int_${LATEST_VERSION}.deb"
+  CHN_DEB_FILENAME="$(basename "$CHN_DEB_URL")"
+  INT_DEB_FILENAME="$(basename "$INT_DEB_URL")"
+  CHN_DEB_TRIPLE="$(echo "$CHN_DEB_FILENAME" | grep -iPo '^.+(?=\.deb$)')"
+  INT_DEB_TRIPLE="$(echo "$INT_DEB_FILENAME" | grep -iPo '^.+(?=\.deb$)')"
+  CHN_DEB_PKG_NAME="$(echo "$CHN_DEB_TRIPLE" | grep -Po '^[a-zA-Z\d\-+]+(?=_)')"
+  INT_DEB_PKG_NAME="$(echo "$INT_DEB_TRIPLE" | grep -Po '^[a-zA-Z\d\-+]+(?=_)')"
+  CHN_DEB_VER="$(echo "$CHN_DEB_TRIPLE" | grep -Po '(?<=_)[a-zA-Z\d\-+.]+(?=_)')"
+  INT_DEB_VER="$(echo "$INT_DEB_TRIPLE" | grep -Po '(?<=_)[a-zA-Z\d\-+.]+(?=_)')"
+  CHN_DEB_ARCH="$(echo "$CHN_DEB_TRIPLE" | grep -Po '(?<=_)[a-zA-Z\d]+$')"
+  INT_DEB_ARCH="$(echo "$INT_DEB_TRIPLE" | grep -Po '(?<=_)[a-zA-Z\d]+$')"
+  CHN_DEB_FILE="$DOWNLOAD_DIR/$CHN_DEB_FILENAME"
+  INT_DEB_FILE="$DOWNLOAD_DIR/$INT_DEB_FILENAME"
 }
 
 download() {
@@ -141,7 +156,7 @@ prefix_cmd() {
 }
 
 build() {
-  ### $1: package version postfix (e.g. "repack" will result in "1.0-repack")
+  ### $1: package version postfix (e.g. "-repack" will result in "1.0-repack")
   ### $2: repack path
   echo "Building $2..."
 
@@ -152,7 +167,7 @@ build() {
 
   detach_hard_link "$2/DEBIAN/control"
   # inject version postfix
-  sed -i "/^Version:/ s/$/-$1/" "$2/DEBIAN/control"
+  sed -i "/^Version:/ s/$/$1/" "$2/DEBIAN/control"
   # build package
   dpkg-deb -z9 -b "$2/" "$BUILD_DIR"
 
@@ -160,29 +175,34 @@ build() {
 }
 
 post() {
-  echo "$LATEST_VERSION" >.curr_version
+  echo "$SOURCE_LOCK" >.source.lock
 }
 
 fetch_source
 
-EXTRACT_PATH_CHN="$EXTRACT_DIR/chn_$LATEST_VERSION"
-EXTRACT_PATH_INT="$EXTRACT_DIR/int_$LATEST_VERSION"
+EXTRACT_PATH_CHN="$EXTRACT_DIR/$CHN_DEB_TRIPLE"
+EXTRACT_PATH_INT="$EXTRACT_DIR/$INT_DEB_TRIPLE"
 
 download_and_extract "$INT_DEB_URL" "$INT_DEB_FILE" "$EXTRACT_PATH_INT" &
 download_and_extract "$CHN_DEB_URL" "$CHN_DEB_FILE" "$EXTRACT_PATH_CHN" &
 wait
 
-REPACK_PATH="$REPACK_DIR/$LATEST_VERSION-$REPACK_VERSION_POSTFIX"
-REPACK_PREFIXED_PATH="$REPACK_DIR/$LATEST_VERSION-$REPACK_PREFIXED_VERSION_POSTFIX"
+INT_MUI_PATH="$REPACK_DIR/${INT_DEB_PKG_NAME}_${INT_DEB_VER}-${MUI_VERSION_POSTFIX}_${INT_DEB_ARCH}"
+INT_MUI_PREFIXED_PATH="$REPACK_DIR/${INT_DEB_PKG_NAME}_${INT_DEB_VER}-${MUI_VERSION_POSTFIX}+${PREFIXED_VERSION_POSTFIX}_${INT_DEB_ARCH}"
+CHN_PREFIXED_PATH="$REPACK_DIR/${CHN_DEB_PKG_NAME}_${CHN_DEB_VER}-${PREFIXED_VERSION_POSTFIX}_${CHN_DEB_ARCH}"
 
-init_repack "$EXTRACT_PATH_INT" "$REPACK_PATH"
-inject_l10n "$EXTRACT_PATH_CHN" "$REPACK_PATH"
+init_repack "$EXTRACT_PATH_INT" "$INT_MUI_PATH"
+inject_l10n "$EXTRACT_PATH_CHN" "$INT_MUI_PATH"
+build "-$MUI_VERSION_POSTFIX" "$INT_MUI_PATH"
 
-init_repack "$REPACK_PATH" "$REPACK_PREFIXED_PATH"
-prefix_cmd "$REPACK_PREFIXED_PATH"
+init_repack "$INT_MUI_PATH" "$INT_MUI_PREFIXED_PATH"
+prefix_cmd "$INT_MUI_PREFIXED_PATH"
+build "+$PREFIXED_VERSION_POSTFIX" "$INT_MUI_PREFIXED_PATH"
 
-# no need to parallelize build, it is already multi-threaded
-build "$REPACK_VERSION_POSTFIX" "$REPACK_PATH"
-build "$REPACK_PREFIXED_VERSION_POSTFIX" "$REPACK_PREFIXED_PATH"
+init_repack "$EXTRACT_PATH_CHN" "$CHN_PREFIXED_PATH"
+prefix_cmd "$CHN_PREFIXED_PATH"
+build "-$PREFIXED_VERSION_POSTFIX" "$CHN_PREFIXED_PATH"
+
+cp -al build/raw/*.deb build/dist/
 
 post

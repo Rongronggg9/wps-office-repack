@@ -8,25 +8,21 @@ WPS Office is a proprietary software. Use at your own risk.
 
 ## Version
 
-[//]: # (### `<numeric_ver>`)
+### `<numeric_ver>`
 
-[//]: # ()
+Unmodified Chinese version.
 
-[//]: # (Unmodified Chinese version.)
+### `<numeric_ver>.XA`
 
-[//]: # ()
+Unmodified International version.
 
-[//]: # (### `<numeric_ver>.XA`)
+### `mui`
 
-[//]: # ()
-
-[//]: # (Unmodified International version.)
-
-### `<base_ver>-repack`
+> Only International version needs localization injection.
 
 `zh_CN` localization injected.
 
-### `<base_ver>+prefixed`
+### `prefixed`
 
 All commands are prefixed with `wps` to prevent conflicts (e.g. https://github.com/MisterTea/EternalTerminal/issues/316).
 
