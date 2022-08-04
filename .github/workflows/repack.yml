@@ -20,8 +20,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Force renew if triggered manually
-        if: ${{ github.event_name == 'workflow_dispatch' }}
+      - name: Force renew if triggered by push event or workflow dispatch
+        if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' }}
         run: echo > .curr_version
 
       - name: Repack
@@ -44,13 +44,13 @@ jobs:
           git push
 
       - name: Tag and push
-        if: ${{ steps.check_worktree.outputs.clean == 'false' || github.event_name == 'workflow_dispatch' }}
+        if: ${{ steps.check_worktree.outputs.clean == 'false' || github.event_name == 'workflow_dispatch' || github.event_name == 'push' }}
         run: |
           git tag -f "v$(cat .curr_version)"
           git push -f --tags
 
       - name: Fetch changelog
-        if: ${{ steps.check_worktree.outputs.clean == 'false' || github.event_name == 'workflow_dispatch' }}
+        if: ${{ steps.check_worktree.outputs.clean == 'false' || github.event_name == 'workflow_dispatch' || github.event_name == 'push' }}
         run: |
           export CHANGELOG_HTML="$(curl -sL 'https://linux.wps.cn/wpslinuxlog')"
           echo "$CHANGELOG_HTML" | grep -Pzo '(?<=<div class="log_main">)[\s\S]*?(?=\s+</div>)' | \
@@ -59,7 +59,7 @@ jobs:
           echo >> build/CHANGELOG.html
 
       - uses: ncipollo/release-action@v1
-        if: ${{ steps.check_worktree.outputs.clean == 'false' || github.event_name == 'workflow_dispatch' }}
+        if: ${{ steps.check_worktree.outputs.clean == 'false' || github.event_name == 'workflow_dispatch' || github.event_name == 'push' }}
         with:
           allowUpdates: true
           artifactErrorsFailBuild: true
