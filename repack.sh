@@ -14,8 +14,15 @@ INT_CDN='https://wdl1.pcfg.cache.wpscdn.com'
 L10N_PATH='/opt/kingsoft/wps-office/office6/mui/zh_CN'
 
 REPACK_VERSION_POSTFIX='repack'
+REPACK_PREFIXED_VERSION_POSTFIX='repack+prefixed'
 
 mkdir -p $DOWNLOAD_DIR $EXTRACT_DIR $REPACK_DIR $BUILD_DIR
+
+detach_hard_link() {
+  ### $1: file path
+  cp -a "$1" "$1.tmp"
+  mv -f "$1.tmp" "$1"
+}
 
 download() {
   # CHN: https://wps-linux-personal.wpscdn.cn/wps/download/ep/Linux2019/11664/wps-office_11.1.0.11664_amd64.deb
@@ -109,6 +116,24 @@ inject_l10n() {
   echo "Done."
 }
 
+prefix_cmd() {
+  ### $1: repack path
+  for componet in "et" "wpp"; do
+    path_bin="/usr/bin/$componet"
+    new_path_bin="/usr/bin/wps$componet"
+    desktop_file="/usr/share/applications/wps-office-$componet.desktop"
+    if [ -f "$1$path_bin" ]; then
+      echo "Prefixing $path_bin to $new_path_bin..."
+      mv "$1$path_bin" "$1$new_path_bin"
+      detach_hard_link "$1$desktop_file"
+      sed -i "s#$path_bin#$new_path_bin#g" "$1$desktop_file"
+    else
+      echo "File $path_bin not found!"
+      exit 1
+    fi
+  done
+}
+
 build() {
   ### $1: package version postfix (e.g. "repack" will result in "1.0-repack")
   ### $2: repack path
@@ -119,9 +144,7 @@ build() {
     exit 1
   fi
 
-  # detach hard link
-  mv "$2/DEBIAN/control" "$2/DEBIAN/control.orig"
-  cp -a "$2/DEBIAN/control.orig" "$2/DEBIAN/control"
+  detach_hard_link "$2/DEBIAN/control"
   # inject version postfix
   sed -i "/^Version:/ s/$/-$1/" "$2/DEBIAN/control"
   # build package
@@ -131,7 +154,7 @@ build() {
 }
 
 post() {
-  echo "$LATEST_VERSION" > .curr_version
+  echo "$LATEST_VERSION" >.curr_version
 }
 
 download
@@ -154,7 +177,20 @@ echo
 inject_l10n "$EXTRACT_PATH_CHN" "$REPACK_PATH"
 echo
 
+REPACK_PREFIXED_PATH="$REPACK_DIR/$LATEST_VERSION-$REPACK_PREFIXED_VERSION_POSTFIX"
+
+init_repack "$REPACK_PATH" "$REPACK_PREFIXED_PATH"
+echo
+
+prefix_cmd "$REPACK_PREFIXED_PATH"
+echo
+
 build "$REPACK_VERSION_POSTFIX" "$REPACK_PATH"
 echo
+
+build "$REPACK_PREFIXED_VERSION_POSTFIX" "$REPACK_PREFIXED_PATH"
+echo
+
+wait
 
 post
