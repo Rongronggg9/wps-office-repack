@@ -15,6 +15,7 @@ L10N_PATH='/opt/kingsoft/wps-office/office6/mui/zh_CN'
 
 MUI_VERSION_POSTFIX='mui'
 PREFIXED_VERSION_POSTFIX='prefixed'
+KDEDARK_VERSION_POSTFIX='kdedark'
 
 mkdir -p $DOWNLOAD_DIR $EXTRACT_DIR $REPACK_DIR $BUILD_DIR
 
@@ -155,6 +156,18 @@ prefix_cmd() {
   echo "Prefixed all commands in $1."
 }
 
+workaround_kde_dark() {
+  ### $1: repack path
+  echo "Working around KDE dark theme in $1..."
+  for componet in "$1"/usr/bin/*; do
+    if [ -f "$componet" ]; then
+      echo "Working around KDE dark theme for $componet..."
+      sed -i "1a\export XDG_CURRENT_DESKTOP=GNOME GTK_THEME=Default" "$componet"
+    fi
+  done
+  echo "Worked around KDE dark theme in $1."
+}
+
 build() {
   ### $1: package version postfix (e.g. "-repack" will result in "1.0-repack")
   ### $2: repack path
@@ -201,6 +214,16 @@ init_repack "$EXTRACT_PATH_CHN" "$CHN_PREFIXED_PATH"
 prefix_cmd "$CHN_PREFIXED_PATH"
 build "+$PREFIXED_VERSION_POSTFIX" "$CHN_PREFIXED_PATH"
 
+CHN_KDEDARK_PATH="$REPACK_DIR/${CHN_DEB_PKG_NAME}_${CHN_DEB_VER}+${KDEDARK_VERSION_POSTFIX}_${CHN_DEB_ARCH}"
+init_repack "$EXTRACT_PATH_CHN" "$CHN_KDEDARK_PATH"
+workaround_kde_dark "$CHN_KDEDARK_PATH"
+build "+$KDEDARK_VERSION_POSTFIX" "$CHN_KDEDARK_PATH"
+
+CHN_PREFIXED_KDEDARK_PATH="$REPACK_DIR/${CHN_DEB_PKG_NAME}_${CHN_DEB_VER}+${PREFIXED_VERSION_POSTFIX}+${KDEDARK_VERSION_POSTFIX}_${CHN_DEB_ARCH}"
+init_repack "$CHN_PREFIXED_PATH" "$CHN_PREFIXED_KDEDARK_PATH"
+workaround_kde_dark "$CHN_PREFIXED_KDEDARK_PATH"
+build "+$KDEDARK_VERSION_POSTFIX" "$CHN_PREFIXED_KDEDARK_PATH"
+
 INT_MUI_PATH="$REPACK_DIR/${INT_DEB_PKG_NAME}_${INT_DEB_VER}+${MUI_VERSION_POSTFIX}_${INT_DEB_ARCH}"
 init_repack "$EXTRACT_PATH_INT" "$INT_MUI_PATH"
 inject_l10n "$EXTRACT_PATH_CHN" "$INT_MUI_PATH"
@@ -210,6 +233,16 @@ INT_MUI_PREFIXED_PATH="$REPACK_DIR/${INT_DEB_PKG_NAME}_${INT_DEB_VER}+${MUI_VERS
 init_repack "$INT_MUI_PATH" "$INT_MUI_PREFIXED_PATH"
 prefix_cmd "$INT_MUI_PREFIXED_PATH"
 build "+$PREFIXED_VERSION_POSTFIX" "$INT_MUI_PREFIXED_PATH"
+
+INT_MUI_KDEDARK_PATH="$REPACK_DIR/${INT_DEB_PKG_NAME}_${INT_DEB_VER}+${MUI_VERSION_POSTFIX}+${KDEDARK_VERSION_POSTFIX}_${INT_DEB_ARCH}"
+init_repack "$INT_MUI_PATH" "$INT_MUI_KDEDARK_PATH"
+workaround_kde_dark "$INT_MUI_KDEDARK_PATH"
+build "+$KDEDARK_VERSION_POSTFIX" "$INT_MUI_KDEDARK_PATH"
+
+INT_MUI_PREFIXED_KDEDARK_PATH="$REPACK_DIR/${INT_DEB_PKG_NAME}_${INT_DEB_VER}+${MUI_VERSION_POSTFIX}+${PREFIXED_VERSION_POSTFIX}+${KDEDARK_VERSION_POSTFIX}_${INT_DEB_ARCH}"
+init_repack "$INT_MUI_PREFIXED_PATH" "$INT_MUI_PREFIXED_KDEDARK_PATH"
+workaround_kde_dark "$INT_MUI_PREFIXED_KDEDARK_PATH"
+build "+$KDEDARK_VERSION_POSTFIX" "$INT_MUI_PREFIXED_KDEDARK_PATH"
 
 cp -al build/raw/*.deb build/dist/
 

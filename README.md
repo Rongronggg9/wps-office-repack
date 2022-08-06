@@ -33,6 +33,10 @@ All commands are prefixed with `wps` to prevent conflicts (e.g. https://github.c
 | `wps`    | `wps`    |
 | `wpspdf` | `wpspdf` |
 
+### `+kdedark`
+
+KDE dark theme workaround applied. If you found some text is not readable and your KDE theme is dark, try this.
+
 ## Raw packages
 
 Chinese: [linux.wps.cn](https://linux.wps.cn)  
