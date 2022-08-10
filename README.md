@@ -10,17 +10,32 @@ WPS Office is a proprietary software. Use at your own risk.
 
 ### `<numeric_ver>`
 
-Unmodified Chinese version.
+Raw Chinese version. Cloud features enabled.
+
+Available localizations:
+
+* `en_US`
+* `mn_CN`
+* `ru_RU`
+* `ug_CN`
+* `zh_CN`
 
 ### `<numeric_ver>.XA`
 
-Unmodified International version.
+Raw International version. Cloud features disabled.
+
+Available localizations:
+
+* `en_US`
+* `mn_CN`
+* `ru_RU`
+* `ug_CN`
 
 ### `+mui`
 
-> It brings back `zh_CN` localization to International version.
+> It brings back `zh_CN` localization to the International version, with cloud features kept disabled.
 
-Localizations (`/opt/kingsoft/wps-office/office6/mui`) and default templates (`/opt/kingsoft/wps-office/templates`) replaced by those from Chinese version.
+Localizations (`/opt/kingsoft/wps-office/office6/mui`) and default templates (`/opt/kingsoft/wps-office/templates`) replaced by those from Chinese version. It is necessary to replace them instead of just copying `zh_CN` localization to activate `zh_CN` user interface.
 
 Localizations from two versions are nearly the same, except for:
 
@@ -45,9 +60,9 @@ All commands are prefixed with `wps` to prevent conflicts (e.g. https://github.c
 
 ### `+kdedark`
 
-KDE dark theme workaround applied. If you find some text is not readable and your KDE theme is dark, try this.
+KDE dark theme workaround applied. If you find some texts are not readable and your KDE theme is dark, try this.
 
-## Raw packages
+## Official website
 
 Chinese: [linux.wps.cn](https://linux.wps.cn)  
 International: [www.wps.com/office/linux/](https://www.wps.com/office/linux/)
