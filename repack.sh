@@ -174,11 +174,13 @@ prefix_cmd() {
     path_bin="/usr/bin/$componet"
     new_path_bin="/usr/bin/wps$componet"
     desktop_file="/usr/share/applications/wps-office-$componet.desktop"
+    desktop_file_opt="/opt/kingsoft/wps-office/desktops/wps-office-$componet.desktop"
     if [ -f "$1$path_bin" ]; then
       echo "Prefixing $path_bin to $new_path_bin..."
       mv "$1$path_bin" "$1$new_path_bin"
       detach_hard_link "$1$desktop_file"
-      sed -i "s#$path_bin#$new_path_bin#g" "$1$desktop_file"
+      detach_hard_link "$1$desktop_file_opt"
+      sed -i "s#$path_bin#$new_path_bin#g" "$1$desktop_file" "$1$desktop_file_opt"
     else
       echo "File $path_bin not found!"
       exit 1
