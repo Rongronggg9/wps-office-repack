@@ -17,7 +17,6 @@ jobs:
     outputs:
       needs_repack: ${{ steps.check_worktree.outputs.needs_repack }}
       version: ${{ steps.new_source_lock.outputs.ver }}
-      source_lock: ${{ steps.new_source_lock.outputs.lock }}
     steps:
       - name: Set up Git
         run: |
@@ -27,11 +26,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Load old source lock
+      - name: Load old version
         id: old_source_lock
-        run: |
-          echo "::set-output name=lock::$(cat .source.lock)"
-          echo "::set-output name=ver::$(cat .source.lock | head -n 1)"
+        run: echo "::set-output name=ver::$(cat .source.lock | head -n 1)"
 
       - name: Fetch new version
         id: new_source_lock
@@ -39,18 +36,29 @@ jobs:
           rm -f .source.lock
           echo > .source.lock
           sh repack.sh -1
-          echo "::set-output name=lock::$(cat .source.lock)"
           echo "::set-output name=ver::$(cat .source.lock | head -n 1)"
 
       - name: Cache
         id: cache
         uses: actions/cache@v3
         with:
-          path: build/raw
-          key: raw_pkg-${{ steps.new_source_lock.outputs.ver }}
+          path: |
+            build/raw
+            .source.lock
+          key: raw_pkg-${{ steps.new_source_lock.outputs.ver }}-${{ github.sha }}
+          restore-keys: raw_pkg-${{ steps.new_source_lock.outputs.ver }}-
 
-      - name: Fetch latest version and download DEB packages
-        run: sh repack.sh 0
+      - name: Fetch latest version, download and extract DEB packages
+        id: fetch_packages
+        run: |
+          if [ "$(ls -d build/raw/*${{ steps.new_source_lock.outputs.ver }}*/ | wc -l)" -eq 2 ]; then
+            echo "::set-output name=fetched::false"
+          else
+            rm -rf build/raw/*
+            sh repack.sh 0
+            mv build/raw/*.deb build/dist/
+            echo "::set-output name=fetched::true"
+          fi
 
       - name: Check worktree
         id: check_worktree
@@ -60,7 +68,7 @@ jobs:
           else 
             echo '::set-output name=clean::false'
           fi
-          if [ "${{ steps.old_source_lock.outputs.lock }}" != "${{ steps.new_source_lock.outputs.lock }}" ] ||
+          if [ "${{ steps.old_source_lock.outputs.ver }}" != "${{ steps.new_source_lock.outputs.ver }}" ] ||
           ${{ steps.cache.outputs.cache-hit != 'true' }} ||
           ${{ steps.check_worktree.outputs.clean == 'false' }} || 
           ${{ github.event_name == 'workflow_dispatch' }} || 
@@ -119,12 +127,12 @@ jobs:
 
       - name: Upload raw DEBs
         uses: ncipollo/release-action@v1
-        if: steps.cache.outputs.cache-hit != 'true'
+        if: steps.fetched_packages.outputs.fetched == 'true'
         with:
           allowUpdates: true
           omitBodyDuringUpdate: true
           artifactErrorsFailBuild: true
-          artifacts: 'build/raw/*.deb'
+          artifacts: 'build/dist/*.deb'
           replacesArtifacts: true
           tag: v${{ steps.new_source_lock.outputs.ver }}
 
@@ -142,17 +150,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
+      - name: Clear old source lock
+        run: rm -f .source.lock
+
       - name: Cache
         id: cache
         uses: actions/cache@v3
         with:
-          path: build/raw
-          key: raw_pkg-${{ needs.fetch.outputs.version }}
-
-      - name: Inject latest source lock
-        run: |
-          rm -f .source.lock
-          echo '${{ needs.fetch.outputs.source_lock }}' > .source.lock
+          path: |
+            build/raw
+            .source.lock
+          key: raw_pkg-${{ needs.fetch.outputs.version }}-${{ github.sha }}
+          restore-keys: raw_pkg-${{ needs.fetch.outputs.version }}-
 
       - name: Repack
         run: sh repack.sh ${{ matrix.stage }}
