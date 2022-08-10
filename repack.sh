@@ -299,23 +299,28 @@ main() {
   stage 0 || download_and_extract "$CHN_DEB_URL" "$CHN_DEB_FILE" "$EXTRACT_PATH_CHN" &
 
   stage 0 || wait $pid_download_int # build INT prefixed package immediately after INT deb is downloaded
+
   stage 1 || repack_target 'INT' "+$PREFIXED_VERSION_POSTFIX"
+
+  stage 2 || repack_target 'INT' "+$KDEDARK_VERSION_POSTFIX"
+
+  stage 3 || repack_target 'INT' "+$PREFIXED_VERSION_POSTFIX+$KDEDARK_VERSION_POSTFIX"
 
   stage 0 || wait # wait for CHN download to finish. `build` cannot be parallelized or it will be even slower.
 
-  stage 2 || repack_target 'CHN' "+$PREFIXED_VERSION_POSTFIX"
+  stage 4 || repack_target 'CHN' "+$PREFIXED_VERSION_POSTFIX"
 
-  stage 3 || repack_target 'CHN' "+$KDEDARK_VERSION_POSTFIX"
+  stage 5 || repack_target 'CHN' "+$KDEDARK_VERSION_POSTFIX"
 
-  stage 4 || repack_target 'CHN' "+$PREFIXED_VERSION_POSTFIX+$KDEDARK_VERSION_POSTFIX"
+  stage 6 || repack_target 'CHN' "+$PREFIXED_VERSION_POSTFIX+$KDEDARK_VERSION_POSTFIX"
 
-  stage 5 || repack_target 'INT' "+$MUI_VERSION_POSTFIX"
+  stage 7 || repack_target 'INT' "+$MUI_VERSION_POSTFIX"
 
-  stage 6 || repack_target 'INT' "+$MUI_VERSION_POSTFIX+$PREFIXED_VERSION_POSTFIX"
+  stage 8 || repack_target 'INT' "+$MUI_VERSION_POSTFIX+$PREFIXED_VERSION_POSTFIX"
 
-  stage 7 || repack_target 'INT' "+$MUI_VERSION_POSTFIX+$KDEDARK_VERSION_POSTFIX"
+  stage 9 || repack_target 'INT' "+$MUI_VERSION_POSTFIX+$KDEDARK_VERSION_POSTFIX"
 
-  stage 8 || repack_target 'INT' "+$MUI_VERSION_POSTFIX+$PREFIXED_VERSION_POSTFIX+$KDEDARK_VERSION_POSTFIX"
+  stage 10 || repack_target 'INT' "+$MUI_VERSION_POSTFIX+$PREFIXED_VERSION_POSTFIX+$KDEDARK_VERSION_POSTFIX"
 }
 
 if [ "$#" -eq 0 ]; then
