@@ -11,7 +11,8 @@ BUILD_DIR="$BASE_DIR/dist"
 
 INT_CDN='https://wdl1.pcfg.cache.wpscdn.com'
 
-L10N_PATH='/opt/kingsoft/wps-office/office6/mui/zh_CN'
+L10N_PATH='/opt/kingsoft/wps-office/office6/mui'
+TEMPLATES_PATH='/opt/kingsoft/wps-office/templates'
 
 MUI_VERSION_POSTFIX='mui'
 PREFIXED_VERSION_POSTFIX='prefixed'
@@ -156,13 +157,11 @@ inject_l10n() {
 
   echo "Injecting l10n from $EXTRACT_PATH_CHN to $1..."
 
-  if [ -d "$1$L10N_PATH" ]; then
-    echo "Path $1$L10N_PATH already exists, aborting..."
-    exit 1
-  fi
-
-  mkdir -p "$1$L10N_PATH"
+  rm -rf "$1$L10N_PATH"
   cp -al "$EXTRACT_PATH_CHN$L10N_PATH" "$1$L10N_PATH"
+
+  rm -rf "$1$TEMPLATES_PATH"
+  cp -al "$EXTRACT_PATH_CHN$TEMPLATES_PATH" "$1$TEMPLATES_PATH"
 
   echo "Injected l10n from $EXTRACT_PATH_CHN to $1."
 }
