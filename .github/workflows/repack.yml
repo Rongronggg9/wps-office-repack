@@ -10,10 +10,14 @@ on:
     - cron: "30 22 * * *"
 
 jobs:
-  repack:
+  fetch:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    outputs:
+      needs_repack: ${{ steps.check_worktree.outputs.needs_repack }}
+      version: ${{ steps.new_source_lock.outputs.ver }}
+      source_lock: ${{ steps.new_source_lock.outputs.lock }}
     steps:
       - name: Set up Git
         run: |
@@ -23,41 +27,67 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Force renew if triggered by push event or workflow dispatch
-        if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' }}
-        run: echo > .source.lock
+      - name: Load old source lock
+        id: old_source_lock
+        run: |
+          echo "::set-output name=lock::$(cat .source.lock)"
+          echo "::set-output name=ver::$(cat .source.lock | head -n 1)"
 
-      - name: Repack
-        run: sh repack.sh
+      - name: Fetch new version
+        id: new_source_lock
+        run: |
+          rm -f .source.lock
+          echo > .source.lock
+          sh repack.sh -1
+          echo "::set-output name=lock::$(cat .source.lock)"
+          echo "::set-output name=ver::$(cat .source.lock | head -n 1)"
+
+      - name: Cache
+        id: cache
+        uses: actions/cache@v3
+        with:
+          path: build/raw
+          key: raw_pkg-${{ steps.new_source_lock.outputs.ver }}
+
+      - name: Fetch latest version and download DEB packages
+        run: sh repack.sh 0
 
       - name: Check worktree
         id: check_worktree
         run: |
-          echo "::set-output name=tag::v$(cat .source.lock | head -n 1)"
           if [ -z "$(git status --porcelain)" ]; then
             echo '::set-output name=clean::true'
           else 
             echo '::set-output name=clean::false'
+          fi
+          if [ "${{ steps.old_source_lock.outputs.lock }}" != "${{ steps.new_source_lock.outputs.lock }}" ] ||
+          ${{ steps.cache.outputs.cache-hit != 'true' }} ||
+          ${{ steps.check_worktree.outputs.clean == 'false' }} || 
+          ${{ github.event_name == 'workflow_dispatch' }} || 
+          ${{ github.event_name == 'push' }}; then
+            echo '::set-output name=needs_repack::true'
+          else
+            echo '::set-output name=needs_repack::false'
           fi
 
       - name: Commit and push
         if: ${{ steps.check_worktree.outputs.clean == 'false' }}
         run: |
           git add -A
-          git commit -m '${{ steps.check_worktree.outputs.tag }}'
+          git commit -m 'v${{ steps.new_source_lock.outputs.ver }}'
           git push
 
       - name: Tag and push
-        if: ${{ steps.check_worktree.outputs.clean == 'false' || github.event_name == 'workflow_dispatch' || github.event_name == 'push' }}
+        if: ${{ steps.check_worktree.outputs.needs_repack == 'true' }}
         run: |
-          git tag -f '${{ steps.check_worktree.outputs.tag }}'
+          git tag -f 'v${{ steps.new_source_lock.outputs.ver }}'
           git push -f --tags
 
       - name: Fetch changelog
-        if: ${{ steps.check_worktree.outputs.clean == 'false' || github.event_name == 'workflow_dispatch' || github.event_name == 'push' }}
+        if: ${{ steps.check_worktree.outputs.needs_repack == 'true' }}
         run: |
           rm -f build/CHANGELOG.html
-          
+
           echo '<details><summary><h1>CHN Changelog</h1></summary>' > build/CHANGELOG.html
           echo >> build/CHANGELOG.html
           curl -sL 'https://linux.wps.cn/wpslinuxlog' | \
@@ -65,9 +95,9 @@ jobs:
             head --bytes=-1 >> build/CHANGELOG.html
           echo >> build/CHANGELOG.html
           echo '</details>' >> build/CHANGELOG.html
-          
+
           echo >> build/CHANGELOG.html
-          
+
           echo '<details><summary><h1>INT Changelog</h1></summary>' >> build/CHANGELOG.html
           echo >> build/CHANGELOG.html
           curl -sL 'https://www.wps.com/whatsnew/linux/' | \
@@ -79,12 +109,60 @@ jobs:
           sed -i 's/^[ \t]*//g' build/CHANGELOG.html
           echo >> build/CHANGELOG.html
 
-      - uses: ncipollo/release-action@v1
-        if: ${{ steps.check_worktree.outputs.clean == 'false' || github.event_name == 'workflow_dispatch' || github.event_name == 'push' }}
+      - name: Release
+        uses: ncipollo/release-action@v1
+        if: ${{ steps.check_worktree.outputs.needs_repack == 'true' }}
         with:
           allowUpdates: true
+          bodyFile: 'build/CHANGELOG.html'
+          tag: v${{ steps.new_source_lock.outputs.ver }}
+
+      - name: Upload raw DEBs
+        uses: ncipollo/release-action@v1
+        if: steps.cache.outputs.cache-hit != 'true'
+        with:
+          allowUpdates: true
+          omitBodyDuringUpdate: true
+          artifactErrorsFailBuild: true
+          artifacts: 'build/raw/*.deb'
+          replacesArtifacts: true
+          tag: v${{ steps.new_source_lock.outputs.ver }}
+
+
+  repack:
+    runs-on: ubuntu-latest
+    needs: [ fetch ]
+    if: needs.fetch.outputs.needs_repack == 'true'
+    strategy:
+      matrix:
+        stage: [ 1, 2, 3, 4, 5, 6, 7, 8 ]
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Cache
+        id: cache
+        uses: actions/cache@v3
+        with:
+          path: build/raw
+          key: raw_pkg-${{ needs.fetch.outputs.version }}
+
+      - name: Inject latest source lock
+        run: |
+          rm -f .source.lock
+          echo '${{ needs.fetch.outputs.source_lock }}' > .source.lock
+
+      - name: Repack
+        run: sh repack.sh ${{ matrix.stage }}
+
+      - name: Upload repacked DEB
+        uses: ncipollo/release-action@v1
+        with:
+          allowUpdates: true
+          omitBodyDuringUpdate: true
           artifactErrorsFailBuild: true
           artifacts: 'build/dist/*.deb'
-          bodyFile: 'build/CHANGELOG.html'
           replacesArtifacts: true
-          tag: ${{ steps.check_worktree.outputs.tag }}
+          tag: v${{ needs.fetch.outputs.version }}

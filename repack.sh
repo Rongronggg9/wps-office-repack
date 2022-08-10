@@ -25,27 +25,55 @@ detach_hard_link() {
   mv -f "$1.tmp" "$1"
 }
 
-fetch_source() {
-  # CHN: https://wps-linux-personal.wpscdn.cn/wps/download/ep/Linux2019/11664/wps-office_11.1.0.11664_amd64.deb
-  # INT: https://wdl1.pcfg.cache.wpscdn.com/wpsdl/wpsoffice/download/linux/11664/wps-office_11.1.0.11664.XA_amd64.deb
-  echo 'Fetching latest version...'
-  DOWNLOAD_PAGE=$(curl -sL 'https://linux.wps.cn')
-  CHN_DEB_URL=$(echo "$DOWNLOAD_PAGE" | grep -Po '(?<=href=").*?(?=".*Deb.*X64)')
+# shellcheck disable=SC2034
+load_source() {
+  ### $1: force fetch remote? (default: 0)
+  ### RETURN 0: not updated or use lock file
+  ### RETURN 1: updated
+  force=${1:-0}
+
+  previous_source_lock=$(cat .source.lock || echo)
+  CHN_DEB_URL=$(echo "$previous_source_lock" | head -n 2 | tail -n 1 | sed 's/CHN: //')
+
+  if [ "$force" -eq 0 ] && [ -n "$CHN_DEB_URL" ] && echo "$CHN_DEB_URL" | grep -Pq '^https?://'; then
+    echo "Loaded previous source lock."
+    fetched=0
+  else
+    # CHN: https://wps-linux-personal.wpscdn.cn/wps/download/ep/Linux2019/11664/wps-office_11.1.0.11664_amd64.deb
+    # INT: https://wdl1.pcfg.cache.wpscdn.com/wpsdl/wpsoffice/download/linux/11664/wps-office_11.1.0.11664.XA_amd64.deb
+    echo 'Fetching latest version...'
+    download_page=$(curl -sL 'https://linux.wps.cn')
+    CHN_DEB_URL=$(echo "$download_page" | grep -Po '(?<=href=").*?(?=".*Deb.*X64)')
+    fetched=1
+  fi
+
   LATEST_VERSION=$(echo "$CHN_DEB_URL" | grep -Po '(?<=_)[\d.]+(?=_)')
   LATEST_BUILD=$(echo "$LATEST_VERSION" | grep -Po '(?<=\.)\d+$')
   INT_DEB_URL="$INT_CDN/wpsdl/wpsoffice/download/linux/$LATEST_BUILD/wps-office_$LATEST_VERSION.XA_amd64.deb"
+
+  SOURCE_LOCK=$(printf '%s\nCHN: %s\nINT: %s' "$LATEST_VERSION" "$CHN_DEB_URL" "$INT_DEB_URL")
 
   echo "Latest version: $LATEST_VERSION"
   echo "CHN deb url: $CHN_DEB_URL"
   echo "INT deb url: $INT_DEB_URL"
 
-  SOURCE_LOCK=$(printf '%s\nCHN: %s\nINT: %s' "$LATEST_VERSION" "$CHN_DEB_URL" "$INT_DEB_URL")
+  updated=0
+  if [ "$SOURCE_LOCK" = "$previous_source_lock" ]; then
+    if [ "$fetched" -eq 1 ]; then
+      echo "No new version found."
+    fi
+  else
+    if [ "$fetched" -eq 1 ]; then
+      updated=1
+    else
+      echo "Invalid source lock! Aborting..."
+      exit 1
+    fi
+  fi
 
-  [ -f .source.lock ] || touch .source.lock
-  PREVIOUS_SOURCE_LOCK=$(cat .source.lock)
-  if [ "$SOURCE_LOCK" = "$PREVIOUS_SOURCE_LOCK" ]; then
-    echo "No new version found."
-    exit 0
+  if [ "$updated" -eq 1 ]; then
+    rm -f .source.lock
+    echo "$SOURCE_LOCK" >.source.lock
   fi
 
   CHN_DEB_FILENAME="$(basename "$CHN_DEB_URL")"
@@ -60,6 +88,9 @@ fetch_source() {
   INT_DEB_ARCH="$(echo "$INT_DEB_TRIPLE" | grep -Po '(?<=_)[a-zA-Z\d]+$')"
   CHN_DEB_FILE="$DOWNLOAD_DIR/$CHN_DEB_FILENAME"
   INT_DEB_FILE="$DOWNLOAD_DIR/$INT_DEB_FILENAME"
+  EXTRACT_PATH_CHN="$EXTRACT_DIR/$CHN_DEB_TRIPLE"
+  EXTRACT_PATH_INT="$EXTRACT_DIR/$INT_DEB_TRIPLE"
+  return $updated
 }
 
 download() {
@@ -114,24 +145,26 @@ init_repack() {
 }
 
 inject_l10n() {
-  ### $1: raw path with l10n files
-  ### $2: repack path without l10n files
-  echo "Injecting l10n from $1 to $2..."
+  ### $1: repack path without l10n files
+  if [ -d "$EXTRACT_PATH_CHN" ]; then
+    :
+  elif [ -f "$CHN_DEB_FILE" ]; then
+    extract "$CHN_DEB_FILE" "$EXTRACT_PATH_CHN"
+  else
+    download_and_extract "$CHN_DEB_URL" "$CHN_DEB_FILE" "$EXTRACT_PATH_CHN"
+  fi
 
-  if [ ! -d "$1" ]; then
-    echo "Raw path $1 not found!"
+  echo "Injecting l10n from $EXTRACT_PATH_CHN to $1..."
+
+  if [ -d "$1$L10N_PATH" ]; then
+    echo "Path $1$L10N_PATH already exists, aborting..."
     exit 1
   fi
 
-  if [ ! -d "$2" ]; then
-    echo "Repack path $2 not found!"
-    exit 1
-  fi
+  mkdir -p "$1$L10N_PATH"
+  cp -al "$EXTRACT_PATH_CHN$L10N_PATH" "$1$L10N_PATH"
 
-  mkdir -p "$2$L10N_PATH"
-  cp -al "$1$L10N_PATH" "$2$L10N_PATH"
-
-  echo "Injected l10n from $1 to $2..."
+  echo "Injected l10n from $EXTRACT_PATH_CHN to $1."
 }
 
 prefix_cmd() {
@@ -187,63 +220,106 @@ build() {
   echo "Built $2."
 }
 
-post() {
-  rm -f .source.lock
-  echo "$SOURCE_LOCK" >.source.lock
+repack_target() {
+  ### $1: base pkg, INT or CHN
+  ### $2: patches to apply, e.g. +patch1+patch2+patch3
+  echo "Repacking target $1..."
+  if [ "$1" != 'INT' ] && [ "$1" != 'CHN' ]; then
+    echo "Invalid target $1!"
+    exit 1
+  fi
+  if echo "$2" | grep -Pq "^(\+($MUI_VERSION_POSTFIX|$PREFIXED_VERSION_POSTFIX|$KDEDARK_VERSION_POSTFIX))+$"; then
+    :
+  else
+    echo "Invalid patches $2!"
+    exit 1
+  fi
+
+  deb_url=$(eval "echo \$${1}_DEB_URL")
+  deb_file=$(eval "echo \$${1}_DEB_FILE")
+  extract_path=$(eval "echo \$EXTRACT_PATH_${1}")
+
+  deb_pkg_name=$(eval "echo \$${1}_DEB_PKG_NAME")
+  deb_ver=$(eval "echo \$${1}_DEB_VER")
+  deb_arch=$(eval "echo \$${1}_DEB_ARCH")
+
+  repack_path="$REPACK_DIR/${deb_pkg_name}_${deb_ver}${2}_${deb_arch}"
+
+  if [ -d "$extract_path" ]; then
+    :
+  elif [ -f "$deb_file" ]; then
+    extract "$deb_file" "$extract_path"
+  else
+    download_and_extract "$deb_url" "$deb_file" "$extract_path"
+  fi
+
+  init_repack "$extract_path" "$repack_path"
+  for patch in $(echo "$2" | grep -Po '(?<=\+)\w+(?=\+|$)'); do
+    if [ "$patch" = "$MUI_VERSION_POSTFIX" ]; then
+      inject_l10n "$repack_path"
+    elif [ "$patch" = "$PREFIXED_VERSION_POSTFIX" ]; then
+      prefix_cmd "$repack_path"
+    elif [ "$patch" = "$KDEDARK_VERSION_POSTFIX" ]; then
+      workaround_kde_dark "$repack_path"
+    else
+      echo "Invalid patch $patch!"
+      exit 1
+    fi
+  done
+  build "$2" "$repack_path"
 }
 
-fetch_source
+stage_init() {
+  ### $@: stage list, e.g. 1 2 3 6 7 8, or i_am_a_stage i_am_another_stage
+  STAGES="$*"
+}
 
-EXTRACT_PATH_CHN="$EXTRACT_DIR/$CHN_DEB_TRIPLE"
-EXTRACT_PATH_INT="$EXTRACT_DIR/$INT_DEB_TRIPLE"
+stage() {
+  ### $1: stage
+  ### RET: 0 if stage should be skipped, 1 otherwise
+  ### Usage: stage $1 || cmd
+  if [ -z "$STAGES" ]; then
+    return 1
+  elif echo "$STAGES" | grep -Pq "(?<=^|\s)$1(?=\s|$)"; then
+    return 1
+  else
+    return 0
+  fi
+}
 
-download_and_extract "$INT_DEB_URL" "$INT_DEB_FILE" "$EXTRACT_PATH_INT" &
-pid_download_int=$!
-download_and_extract "$CHN_DEB_URL" "$CHN_DEB_FILE" "$EXTRACT_PATH_CHN" &
+main() {
+  ### $@: stage list
+  stage_init "$@"
 
-wait $pid_download_int # build INT prefixed package immediately after INT deb is downloaded
-INT_PREFIXED_PATH="$REPACK_DIR/${INT_DEB_PKG_NAME}_${INT_DEB_VER}+${PREFIXED_VERSION_POSTFIX}_${INT_DEB_ARCH}"
-init_repack "$EXTRACT_PATH_INT" "$INT_PREFIXED_PATH"
-prefix_cmd "$INT_PREFIXED_PATH"
-build "+$PREFIXED_VERSION_POSTFIX" "$INT_PREFIXED_PATH"
+  load_source "$(stage -1)" || true # if stage -1 is specified, force fetch remote, otherwise use local
 
-wait # wait for CHN download to finish. `build` cannot be parallelized or it will be even slower.
+  stage 0 || download_and_extract "$INT_DEB_URL" "$INT_DEB_FILE" "$EXTRACT_PATH_INT" &
+  stage 0 || pid_download_int=$!
+  stage 0 || download_and_extract "$CHN_DEB_URL" "$CHN_DEB_FILE" "$EXTRACT_PATH_CHN" &
 
-CHN_PREFIXED_PATH="$REPACK_DIR/${CHN_DEB_PKG_NAME}_${CHN_DEB_VER}+${PREFIXED_VERSION_POSTFIX}_${CHN_DEB_ARCH}"
-init_repack "$EXTRACT_PATH_CHN" "$CHN_PREFIXED_PATH"
-prefix_cmd "$CHN_PREFIXED_PATH"
-build "+$PREFIXED_VERSION_POSTFIX" "$CHN_PREFIXED_PATH"
+  stage 0 || wait $pid_download_int # build INT prefixed package immediately after INT deb is downloaded
+  stage 1 || repack_target 'INT' "+$PREFIXED_VERSION_POSTFIX"
 
-CHN_KDEDARK_PATH="$REPACK_DIR/${CHN_DEB_PKG_NAME}_${CHN_DEB_VER}+${KDEDARK_VERSION_POSTFIX}_${CHN_DEB_ARCH}"
-init_repack "$EXTRACT_PATH_CHN" "$CHN_KDEDARK_PATH"
-workaround_kde_dark "$CHN_KDEDARK_PATH"
-build "+$KDEDARK_VERSION_POSTFIX" "$CHN_KDEDARK_PATH"
+  stage 0 || wait # wait for CHN download to finish. `build` cannot be parallelized or it will be even slower.
 
-CHN_PREFIXED_KDEDARK_PATH="$REPACK_DIR/${CHN_DEB_PKG_NAME}_${CHN_DEB_VER}+${PREFIXED_VERSION_POSTFIX}+${KDEDARK_VERSION_POSTFIX}_${CHN_DEB_ARCH}"
-init_repack "$CHN_PREFIXED_PATH" "$CHN_PREFIXED_KDEDARK_PATH"
-workaround_kde_dark "$CHN_PREFIXED_KDEDARK_PATH"
-build "+$KDEDARK_VERSION_POSTFIX" "$CHN_PREFIXED_KDEDARK_PATH"
+  stage 2 || repack_target 'CHN' "+$PREFIXED_VERSION_POSTFIX"
 
-INT_MUI_PATH="$REPACK_DIR/${INT_DEB_PKG_NAME}_${INT_DEB_VER}+${MUI_VERSION_POSTFIX}_${INT_DEB_ARCH}"
-init_repack "$EXTRACT_PATH_INT" "$INT_MUI_PATH"
-inject_l10n "$EXTRACT_PATH_CHN" "$INT_MUI_PATH"
-build "+$MUI_VERSION_POSTFIX" "$INT_MUI_PATH"
+  stage 3 || repack_target 'CHN' "+$KDEDARK_VERSION_POSTFIX"
 
-INT_MUI_PREFIXED_PATH="$REPACK_DIR/${INT_DEB_PKG_NAME}_${INT_DEB_VER}+${MUI_VERSION_POSTFIX}+${PREFIXED_VERSION_POSTFIX}_${INT_DEB_ARCH}"
-init_repack "$INT_MUI_PATH" "$INT_MUI_PREFIXED_PATH"
-prefix_cmd "$INT_MUI_PREFIXED_PATH"
-build "+$PREFIXED_VERSION_POSTFIX" "$INT_MUI_PREFIXED_PATH"
+  stage 4 || repack_target 'CHN' "+$PREFIXED_VERSION_POSTFIX+$KDEDARK_VERSION_POSTFIX"
 
-INT_MUI_KDEDARK_PATH="$REPACK_DIR/${INT_DEB_PKG_NAME}_${INT_DEB_VER}+${MUI_VERSION_POSTFIX}+${KDEDARK_VERSION_POSTFIX}_${INT_DEB_ARCH}"
-init_repack "$INT_MUI_PATH" "$INT_MUI_KDEDARK_PATH"
-workaround_kde_dark "$INT_MUI_KDEDARK_PATH"
-build "+$KDEDARK_VERSION_POSTFIX" "$INT_MUI_KDEDARK_PATH"
+  stage 5 || repack_target 'INT' "+$MUI_VERSION_POSTFIX"
 
-INT_MUI_PREFIXED_KDEDARK_PATH="$REPACK_DIR/${INT_DEB_PKG_NAME}_${INT_DEB_VER}+${MUI_VERSION_POSTFIX}+${PREFIXED_VERSION_POSTFIX}+${KDEDARK_VERSION_POSTFIX}_${INT_DEB_ARCH}"
-init_repack "$INT_MUI_PREFIXED_PATH" "$INT_MUI_PREFIXED_KDEDARK_PATH"
-workaround_kde_dark "$INT_MUI_PREFIXED_KDEDARK_PATH"
-build "+$KDEDARK_VERSION_POSTFIX" "$INT_MUI_PREFIXED_KDEDARK_PATH"
+  stage 6 || repack_target 'INT' "+$MUI_VERSION_POSTFIX+$PREFIXED_VERSION_POSTFIX"
 
-cp -al build/raw/*.deb build/dist/
+  stage 7 || repack_target 'INT' "+$MUI_VERSION_POSTFIX+$KDEDARK_VERSION_POSTFIX"
 
-post
+  stage 8 || repack_target 'INT' "+$MUI_VERSION_POSTFIX+$PREFIXED_VERSION_POSTFIX+$KDEDARK_VERSION_POSTFIX"
+}
+
+if [ "$#" -eq 0 ]; then
+  main
+  cp -al build/raw/*.deb build/dist/
+else
+  main "$@"
+fi
