@@ -44,7 +44,7 @@ load_source() {
     # INT: https://wdl1.pcfg.cache.wpscdn.com/wpsdl/wpsoffice/download/linux/11664/wps-office_11.1.0.11664.XA_amd64.deb
     echo 'Fetching latest version...'
     download_page=$(curl -sL 'https://linux.wps.cn')
-    CHN_DEB_URL=$(echo "$download_page" | grep -Po '(?<=href=").*?(?=".*Deb.*X64)')
+    CHN_DEB_URL=$(echo "$download_page" | grep -Po '(?<=href=").+?(?=".*Deb.*X64)')
     fetched=1
   fi
 
@@ -57,6 +57,11 @@ load_source() {
   echo "Latest version: $LATEST_VERSION"
   echo "CHN deb url: $CHN_DEB_URL"
   echo "INT deb url: $INT_DEB_URL"
+
+  if [ -z "$LATEST_VERSION" ] || [ -z "$CHN_DEB_URL" ] || [ -z "$INT_DEB_URL" ]; then
+    echo 'Invalid parsed source! Aborting...'
+    exit 1
+  fi
 
   updated=0
   if [ "$SOURCE_LOCK" = "$previous_source_lock" ]; then
