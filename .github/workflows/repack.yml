@@ -129,7 +129,7 @@ jobs:
 
       - name: Upload raw DEBs
         uses: ncipollo/release-action@v1
-        if: steps.fetched_packages.outputs.fetched == 'true'
+        if: steps.fetch_packages.outputs.fetched == 'true'
         with:
           allowUpdates: true
           omitBodyDuringUpdate: true
