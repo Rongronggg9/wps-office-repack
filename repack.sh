@@ -310,13 +310,18 @@ repack_task() {
   if [ "$1" -gt 0 ]; then
     waitpid -e "$1"
   fi
-  stage "$(($2 + 1))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_POSTFIX"
-  stage "$(($2 + 2))" || repack_target "$3" "${4:-}+$KDEDARK_VERSION_POSTFIX"
-  stage "$(($2 + 3))" || repack_target "$3" "${4:-}+$FCITX5XWAYLAND_VERSION_POSTFIX"
-  stage "$(($2 + 4))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_POSTFIX+$KDEDARK_VERSION_POSTFIX"
-  stage "$(($2 + 5))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_POSTFIX+$FCITX5XWAYLAND_VERSION_POSTFIX"
-  stage "$(($2 + 6))" || repack_target "$3" "${4:-}+$KDEDARK_VERSION_POSTFIX+$FCITX5XWAYLAND_VERSION_POSTFIX"
-  stage "$(($2 + 7))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_POSTFIX+$KDEDARK_VERSION_POSTFIX+$FCITX5XWAYLAND_VERSION_POSTFIX"
+  stage_base="$2"
+  if [ -n "${4:-}" ]; then
+    stage "$((stage_base + 1))" || repack_target "$3" "${4:-}"
+    stage_base="$((stage_base + 1))"
+  fi
+  stage "$((stage_base + 1))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_POSTFIX"
+  stage "$((stage_base + 2))" || repack_target "$3" "${4:-}+$KDEDARK_VERSION_POSTFIX"
+  stage "$((stage_base + 3))" || repack_target "$3" "${4:-}+$FCITX5XWAYLAND_VERSION_POSTFIX"
+  stage "$((stage_base + 4))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_POSTFIX+$KDEDARK_VERSION_POSTFIX"
+  stage "$((stage_base + 5))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_POSTFIX+$FCITX5XWAYLAND_VERSION_POSTFIX"
+  stage "$((stage_base + 6))" || repack_target "$3" "${4:-}+$KDEDARK_VERSION_POSTFIX+$FCITX5XWAYLAND_VERSION_POSTFIX"
+  stage "$((stage_base + 7))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_POSTFIX+$KDEDARK_VERSION_POSTFIX+$FCITX5XWAYLAND_VERSION_POSTFIX"
 }
 
 main() {
@@ -342,7 +347,7 @@ main() {
   stage 0 || wait "$pid_download_int" "$pid_download_chn"
 
   # build INT+mui packages immediately after INT & CHN deb is downloaded
-  repack_task 0 "$((stage_per_task * 2))" 'INT' "+$MUI_VERSION_POSTFIX" &
+  repack_task 0 "$((stage_per_task * 2 + 1))" 'INT' "+$MUI_VERSION_POSTFIX" &
 
   # wait for all tasks
   wait
