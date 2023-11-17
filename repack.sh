@@ -20,12 +20,6 @@ KDEDARK_VERSION_POSTFIX='kdedark'
 
 mkdir -p $DOWNLOAD_DIR $EXTRACT_DIR $REPACK_DIR $BUILD_DIR
 
-detach_hard_link() {
-  ### $1: file path
-  cp -a "$1" "$1.tmp"
-  mv -f "$1.tmp" "$1"
-}
-
 # shellcheck disable=SC2034
 load_source() {
   ### $1: force fetch remote? (default: 0)
@@ -183,8 +177,6 @@ prefix_cmd() {
     if [ -f "$1$path_bin" ]; then
       echo "Prefixing $path_bin to $new_path_bin..."
       mv "$1$path_bin" "$1$new_path_bin"
-      detach_hard_link "$1$desktop_file"
-      detach_hard_link "$1$desktop_file_opt"
       sed -i "s#$path_bin#$new_path_bin#g" "$1$desktop_file" "$1$desktop_file_opt"
     else
       echo "File $path_bin not found!"
@@ -217,7 +209,6 @@ build() {
     exit 1
   fi
 
-  detach_hard_link "$2/DEBIAN/control"
   # inject version postfix
   sed -i "/^Version:/ s/$/$1/" "$2/DEBIAN/control"
   # build package
