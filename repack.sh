@@ -96,7 +96,11 @@ load_source() {
 download() {
   # $1: url
   # $2: file path
-  wget -q -c --tries=10 --show-progress --progress=bar:force:noscroll -O "$2" "$1"
+  if which aria2c >/dev/null; then
+    aria2c -c -j8 -x8 -s8 -d "$(dirname "$2")" -o "$(basename "$2")" "$1"
+  else
+    wget -q -c --tries=10 --show-progress --progress=bar:force:noscroll -O "$2" "$1"
+  fi
 }
 
 extract() {
