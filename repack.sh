@@ -96,11 +96,7 @@ load_source() {
 download() {
   # $1: url
   # $2: file path
-  if [ ! -f "$2" ]; then
-    wget -q --show-progress --progress=bar:force:noscroll -O "$2" "$1"
-  else
-    echo "$2 already exists, skipping..."
-  fi
+  wget -q -c --tries=10 --show-progress --progress=bar:force:noscroll -O "$2" "$1"
 }
 
 extract() {
