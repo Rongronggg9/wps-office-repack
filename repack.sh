@@ -319,6 +319,13 @@ main() {
   stage 10 || repack_target 'INT' "+$MUI_VERSION_POSTFIX+$PREFIXED_VERSION_POSTFIX+$KDEDARK_VERSION_POSTFIX"
 }
 
+abort() {
+  echo "Aborting..."
+  jobs -l
+  pkill -s0
+}
+trap abort INT
+
 if [ "$#" -eq 0 ]; then
   main
   cp -al build/raw/*.deb build/dist/
