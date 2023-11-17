@@ -11,12 +11,17 @@ BUILD_DIR="$BASE_DIR/dist"
 
 INT_CDN='https://wdl1.pcfg.cache.wpscdn.com'
 
-L10N_PATH='/opt/kingsoft/wps-office/office6/mui'
+BIN_PATH='/usr/bin'
+REAL_BIN_PATH='/opt/kingsoft/wps-office/office6'
+L10N_PATH="$REAL_BIN_PATH/mui"
 TEMPLATES_PATH='/opt/kingsoft/wps-office/templates'
 
 MUI_VERSION_POSTFIX='mui'
 PREFIXED_VERSION_POSTFIX='prefixed'
 KDEDARK_VERSION_POSTFIX='kdedark'
+FCITX5XWAYLAND_VERSION_POSTFIX='fcitx5xwayland'
+
+VALID_VER_POSTFIX_REGEX="^(\+($MUI_VERSION_POSTFIX|$PREFIXED_VERSION_POSTFIX|$KDEDARK_VERSION_POSTFIX|$FCITX5XWAYLAND_VERSION_POSTFIX))+$"
 
 mkdir -p $DOWNLOAD_DIR $EXTRACT_DIR $REPACK_DIR $BUILD_DIR
 
@@ -170,8 +175,8 @@ prefix_cmd() {
   echo "Prefixing all commands in $1..."
 
   for componet in "et" "wpp"; do
-    path_bin="/usr/bin/$componet"
-    new_path_bin="/usr/bin/wps$componet"
+    path_bin="$BIN_PATH/$componet"
+    new_path_bin="$BIN_PATH/wps$componet"
     desktop_file="/usr/share/applications/wps-office-$componet.desktop"
     desktop_file_opt="/opt/kingsoft/wps-office/desktops/wps-office-$componet.desktop"
     if [ -f "$1$path_bin" ]; then
@@ -190,13 +195,28 @@ prefix_cmd() {
 workaround_kde_dark() {
   ### $1: repack path
   echo "Working around KDE dark theme in $1..."
-  for componet in "$1"/usr/bin/*; do
+  for componet in "$1$BIN_PATH"/*; do
     if [ -f "$componet" ]; then
       echo "Working around KDE dark theme for $componet..."
       sed -i "1a\export XDG_CURRENT_DESKTOP=GNOME GTK_THEME=Default" "$componet"
     fi
   done
   echo "Worked around KDE dark theme in $1."
+}
+
+workaround_fcitx5_xwayland() {
+  ### $1: repack path
+  script_name='fcitx5xwayland.sh'
+  script_path="$REAL_BIN_PATH/$script_name"
+  echo "Working around Fcitx5 on XWayland in $1..."
+  cp "src/$script_name" "$1$script_path"
+  for componet in "$1$BIN_PATH"/*; do
+    if [ -f "$componet" ]; then
+      echo "Working around Fcitx5 on XWayland for $componet..."
+      sed -i "1a\. '$script_path'" "$componet"
+    fi
+  done
+  echo "Worked around Fcitx5 on XWayland in $1."
 }
 
 build() {
@@ -220,14 +240,12 @@ build() {
 repack_target() {
   ### $1: base pkg, INT or CHN
   ### $2: patches to apply, e.g. +patch1+patch2+patch3
-  echo "Repacking target $1..."
+  echo "Repacking target $1 with patches $2..."
   if [ "$1" != 'INT' ] && [ "$1" != 'CHN' ]; then
     echo "Invalid target $1!"
     exit 1
   fi
-  if echo "$2" | grep -Pq "^(\+($MUI_VERSION_POSTFIX|$PREFIXED_VERSION_POSTFIX|$KDEDARK_VERSION_POSTFIX))+$"; then
-    :
-  else
+  if ! echo "$2" | grep -Pq "$VALID_VER_POSTFIX_REGEX"; then
     echo "Invalid patches $2!"
     exit 1
   fi
@@ -252,16 +270,16 @@ repack_target() {
 
   init_repack "$extract_path" "$repack_path"
   for patch in $(echo "$2" | grep -Po '(?<=\+)\w+(?=\+|$)'); do
-    if [ "$patch" = "$MUI_VERSION_POSTFIX" ]; then
-      inject_l10n "$repack_path"
-    elif [ "$patch" = "$PREFIXED_VERSION_POSTFIX" ]; then
-      prefix_cmd "$repack_path"
-    elif [ "$patch" = "$KDEDARK_VERSION_POSTFIX" ]; then
-      workaround_kde_dark "$repack_path"
-    else
+    case "$patch" in
+    "$MUI_VERSION_POSTFIX") inject_l10n "$repack_path" ;;
+    "$PREFIXED_VERSION_POSTFIX") prefix_cmd "$repack_path" ;;
+    "$KDEDARK_VERSION_POSTFIX") workaround_kde_dark "$repack_path" ;;
+    "$FCITX5XWAYLAND_VERSION_POSTFIX") workaround_fcitx5_xwayland "$repack_path" ;;
+    *)
       echo "Invalid patch $patch!"
       exit 1
-    fi
+      ;;
+    esac
   done
   build "$2" "$repack_path"
 }
@@ -284,39 +302,50 @@ stage() {
   fi
 }
 
+repack_task() {
+  ### $1: pid of prerequisite, 0 if no prerequisite
+  ### $2: stage base to add
+  ### $3: target
+  ### $4: postfix base to add (optional)
+  if [ "$1" -gt 0 ]; then
+    waitpid -e "$1"
+  fi
+  stage "$(($2 + 1))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_POSTFIX"
+  stage "$(($2 + 2))" || repack_target "$3" "${4:-}+$KDEDARK_VERSION_POSTFIX"
+  stage "$(($2 + 3))" || repack_target "$3" "${4:-}+$FCITX5XWAYLAND_VERSION_POSTFIX"
+  stage "$(($2 + 4))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_POSTFIX+$KDEDARK_VERSION_POSTFIX"
+  stage "$(($2 + 5))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_POSTFIX+$FCITX5XWAYLAND_VERSION_POSTFIX"
+  stage "$(($2 + 6))" || repack_target "$3" "${4:-}+$KDEDARK_VERSION_POSTFIX+$FCITX5XWAYLAND_VERSION_POSTFIX"
+  stage "$(($2 + 7))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_POSTFIX+$KDEDARK_VERSION_POSTFIX+$FCITX5XWAYLAND_VERSION_POSTFIX"
+}
+
 main() {
   ### $@: stage list
+  stage_per_task=7
+
   stage_init "$@"
 
   load_source "$(stage -1)" || true # if stage -1 is specified, force fetch remote, otherwise use local
 
   stage 0 || download_and_extract "$INT_DEB_URL" "$INT_DEB_FILE" "$EXTRACT_PATH_INT" &
-  stage 0 || pid_download_int=$!
+  stage 0 && pid_download_int=0 || pid_download_int=$!
   stage 0 || download_and_extract "$CHN_DEB_URL" "$CHN_DEB_FILE" "$EXTRACT_PATH_CHN" &
+  stage 0 && pid_download_chn=0 || pid_download_chn=$!
 
-  stage 0 || wait $pid_download_int # build INT prefixed package immediately after INT deb is downloaded
+  # build INT packages immediately after INT deb is downloaded
+  repack_task "$pid_download_int" 0 'INT' &
 
-  stage 1 || repack_target 'INT' "+$PREFIXED_VERSION_POSTFIX"
+  # build CHN packages immediately after CHN deb is downloaded
+  repack_task "$pid_download_chn" "$stage_per_task" 'CHN' &
 
-  stage 2 || repack_target 'INT' "+$KDEDARK_VERSION_POSTFIX"
+  # wait for INT & CHN download to finish in order to build INT+mui packages
+  stage 0 || wait "$pid_download_int" "$pid_download_chn"
 
-  stage 3 || repack_target 'INT' "+$PREFIXED_VERSION_POSTFIX+$KDEDARK_VERSION_POSTFIX"
+  # build INT+mui packages immediately after INT & CHN deb is downloaded
+  repack_task 0 "$((stage_per_task * 2))" 'INT' "+$MUI_VERSION_POSTFIX" &
 
-  stage 0 || wait # wait for CHN download to finish. `build` cannot be parallelized or it will be even slower.
-
-  stage 4 || repack_target 'CHN' "+$PREFIXED_VERSION_POSTFIX"
-
-  stage 5 || repack_target 'CHN' "+$KDEDARK_VERSION_POSTFIX"
-
-  stage 6 || repack_target 'CHN' "+$PREFIXED_VERSION_POSTFIX+$KDEDARK_VERSION_POSTFIX"
-
-  stage 7 || repack_target 'INT' "+$MUI_VERSION_POSTFIX"
-
-  stage 8 || repack_target 'INT' "+$MUI_VERSION_POSTFIX+$PREFIXED_VERSION_POSTFIX"
-
-  stage 9 || repack_target 'INT' "+$MUI_VERSION_POSTFIX+$KDEDARK_VERSION_POSTFIX"
-
-  stage 10 || repack_target 'INT' "+$MUI_VERSION_POSTFIX+$PREFIXED_VERSION_POSTFIX+$KDEDARK_VERSION_POSTFIX"
+  # wait for all tasks
+  wait
 }
 
 abort() {

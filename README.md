@@ -62,6 +62,10 @@ All commands are prefixed with `wps` to prevent conflicts (e.g. https://github.c
 
 KDE dark theme workaround applied. If you find some texts are not readable and your KDE theme is dark, try this.
 
+### `+fcitx5xwayland`
+
+Fcitx 5 on XWayland workaround applied. If you have set your environment according to [Using Fcitx 5 on Wayland](https://fcitx-im.org/wiki/Using_Fcitx_5_on_Wayland) and Fcitx 5 doesn't work in WPS Office, try this.
+
 ## Official website
 
 Chinese: [linux.wps.cn](https://linux.wps.cn)  
