@@ -111,7 +111,7 @@ jobs:
           echo '<details><summary><h1>INT Changelog</h1></summary>' >> build/CHANGELOG.html
           echo >> build/CHANGELOG.html
           curl -sL 'https://www.wps.com/whatsnew/linux/' | \
-            grep -Pzo '<div class="nuxt-content"[^>]*>[\s\S]*?</div>' | \
+            grep -Pzo '<div class="__linux"[^>]*>[\s\S]*?</div>' | \
             head --bytes=-1 >> build/CHANGELOG.html
           echo >> build/CHANGELOG.html
           echo '</details>' >> build/CHANGELOG.html
