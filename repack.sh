@@ -302,13 +302,24 @@ stage() {
   fi
 }
 
+wait_task() {
+  ### $1: pid
+  if waitpid -V >/dev/null 2>&1; then
+    waitpid -e "$1"
+  else
+    while kill -0 "$1" >/dev/null 2>&1; do
+      sleep 0.5
+    done
+  fi
+}
+
 repack_task() {
   ### $1: pid of prerequisite, 0 if no prerequisite
   ### $2: stage base to add
   ### $3: target
   ### $4: postfix base to add (optional)
   if [ "$1" -gt 0 ]; then
-    waitpid -e "$1"
+    wait_task "$1"
   fi
   stage_base="$2"
   if [ -n "${4:-}" ]; then
