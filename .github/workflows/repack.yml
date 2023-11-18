@@ -30,7 +30,14 @@ jobs:
         id: old_source_lock
         run: |
           echo "::set-output name=ver::$(cat .source.lock | head -n 1)"
+
+      - name: Fetch new version
+        id: new_source_lock
+        run: |
           rm -f .source.lock
+          echo > .source.lock
+          sh repack.sh -1
+          echo "::set-output name=ver::$(cat .source.lock | head -n 1)"
 
       - name: Cache
         id: cache
@@ -41,14 +48,6 @@ jobs:
             .source.lock
           key: raw_pkg-${{ steps.new_source_lock.outputs.ver }}-${{ github.sha }}
           restore-keys: raw_pkg-${{ steps.new_source_lock.outputs.ver }}-
-
-      - name: Fetch new version
-        id: new_source_lock
-        run: |
-          rm -f .source.lock
-          echo > .source.lock
-          sh repack.sh -1
-          echo "::set-output name=ver::$(cat .source.lock | head -n 1)"
 
       - name: Fetch latest version, download and extract DEB packages
         id: fetch_packages
