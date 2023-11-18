@@ -358,7 +358,7 @@ main() {
   stage 0 || wait "$pid_download_int" "$pid_download_chn"
 
   # build INT+mui packages immediately after INT & CHN deb is downloaded
-  repack_task 0 "$((stage_per_task * 2 + 1))" 'INT' "+$MUI_VERSION_POSTFIX" &
+  repack_task 0 "$((stage_per_task * 2))" 'INT' "+$MUI_VERSION_POSTFIX" &
 
   # wait for all tasks
   wait
