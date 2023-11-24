@@ -6,22 +6,28 @@ BASE_DIR='build'
 
 DOWNLOAD_DIR="$BASE_DIR/raw"
 EXTRACT_DIR="$BASE_DIR/raw"
+CONTRIB_DIR="$BASE_DIR/contrib"
 REPACK_DIR="$BASE_DIR/repack"
 BUILD_DIR="$BASE_DIR/dist"
 
 INT_CDN='https://wdl1.pcfg.cache.wpscdn.com'
+
+LIBFREETYPE6_DEB_URL='https://snapshot.debian.org/archive/debian/20220702T033910Z/pool/main/f/freetype/libfreetype6_2.10.4%2Bdfsg-1%2Bdeb11u1_amd64.deb'
+LIBFREETYPE6_DEB_FILE="$CONTRIB_DIR/$(basename "$LIBFREETYPE6_DEB_URL")"
+EXTRACT_PATH_LIBFREETYPE6="$EXTRACT_DIR/libfreetype6"
 
 BIN_PATH='/usr/bin'
 REAL_BIN_PATH='/opt/kingsoft/wps-office/office6'
 L10N_PATH="$REAL_BIN_PATH/mui"
 TEMPLATES_PATH='/opt/kingsoft/wps-office/templates'
 
-MUI_VERSION_POSTFIX='mui'
-PREFIXED_VERSION_POSTFIX='prefixed'
-KDEDARK_VERSION_POSTFIX='kdedark'
-FCITX5XWAYLAND_VERSION_POSTFIX='fcitx5xwayland'
+MUI_VERSION_SUFFIX='mui'
+PREFIXED_VERSION_SUFFIX='prefixed'
+KDEDARK_VERSION_SUFFIX='kdedark'
+FCITX5XWAYLAND_VERSION_SUFFIX='fcitx5xwayland'
+BOLD_VERSION_SUFFIX='bold'
 
-VALID_VER_POSTFIX_REGEX="^(\+($MUI_VERSION_POSTFIX|$PREFIXED_VERSION_POSTFIX|$KDEDARK_VERSION_POSTFIX|$FCITX5XWAYLAND_VERSION_POSTFIX))+$"
+VALID_VER_SUFFIX_REGEX="^(\+($MUI_VERSION_SUFFIX|$PREFIXED_VERSION_SUFFIX|$KDEDARK_VERSION_SUFFIX|$FCITX5XWAYLAND_VERSION_SUFFIX|$BOLD_VERSION_SUFFIX))+$"
 
 mkdir -p $DOWNLOAD_DIR $EXTRACT_DIR $REPACK_DIR $BUILD_DIR
 
@@ -219,8 +225,22 @@ workaround_fcitx5_xwayland() {
   echo "Worked around Fcitx5 on XWayland in $1."
 }
 
+workaround_bold() {
+  ### $1: repack path
+  if [ -d "$EXTRACT_PATH_LIBFREETYPE6" ]; then
+    :
+  elif [ -f "$LIBFREETYPE6_DEB_FILE" ]; then
+    extract "$LIBFREETYPE6_DEB_FILE" "$EXTRACT_PATH_LIBFREETYPE6"
+  else
+    download_and_extract "$LIBFREETYPE6_DEB_URL" "$LIBFREETYPE6_DEB_FILE" "$EXTRACT_PATH_LIBFREETYPE6"
+  fi
+  echo "Working around bold font in $1..."
+  cp -al "$EXTRACT_PATH_LIBFREETYPE6/usr/lib/x86_64-linux-gnu"/* "$1$REAL_BIN_PATH/"
+  echo "Worked around bold font in $1."
+}
+
 build() {
-  ### $1: package version postfix (e.g. "-repack" will result in "1.0-repack")
+  ### $1: package version suffix (e.g. "-repack" will result in "1.0-repack")
   ### $2: repack path
   echo "Building $2..."
 
@@ -229,7 +249,7 @@ build() {
     exit 1
   fi
 
-  # inject version postfix
+  # inject version suffix
   sed -i "/^Version:/ s/$/$1/" "$2/DEBIAN/control"
   # build package
   dpkg-deb --root-owner-group -b "$2/" "$BUILD_DIR"
@@ -245,7 +265,7 @@ repack_target() {
     echo "Invalid target $1!"
     exit 1
   fi
-  if ! echo "$2" | grep -Pq "$VALID_VER_POSTFIX_REGEX"; then
+  if ! echo "$2" | grep -Pq "$VALID_VER_SUFFIX_REGEX"; then
     echo "Invalid patches $2!"
     exit 1
   fi
@@ -271,10 +291,11 @@ repack_target() {
   init_repack "$extract_path" "$repack_path"
   for patch in $(echo "$2" | grep -Po '(?<=\+)\w+(?=\+|$)'); do
     case "$patch" in
-    "$MUI_VERSION_POSTFIX") inject_l10n "$repack_path" ;;
-    "$PREFIXED_VERSION_POSTFIX") prefix_cmd "$repack_path" ;;
-    "$KDEDARK_VERSION_POSTFIX") workaround_kde_dark "$repack_path" ;;
-    "$FCITX5XWAYLAND_VERSION_POSTFIX") workaround_fcitx5_xwayland "$repack_path" ;;
+    "$MUI_VERSION_SUFFIX") inject_l10n "$repack_path" ;;
+    "$PREFIXED_VERSION_SUFFIX") prefix_cmd "$repack_path" ;;
+    "$KDEDARK_VERSION_SUFFIX") workaround_kde_dark "$repack_path" ;;
+    "$FCITX5XWAYLAND_VERSION_SUFFIX") workaround_fcitx5_xwayland "$repack_path" ;;
+    "$BOLD_VERSION_SUFFIX") workaround_bold "$repack_path" ;;
     *)
       echo "Invalid patch $patch!"
       exit 1
@@ -317,36 +338,46 @@ repack_task() {
   ### $1: pid of prerequisite, 0 if no prerequisite
   ### $2: stage base to add
   ### $3: target
-  ### $4: postfix base to add (optional)
-  if [ "$1" -gt 0 ]; then
-    wait_task "$1"
-  fi
+  ### $4: suffix base to add (optional)
+  [ "$1" -eq 0 ] || wait_task "$1" || true
   stage_base="$2"
   if [ -n "${4:-}" ]; then
     stage "$((stage_base + 1))" || repack_target "$3" "${4:-}"
     stage_base="$((stage_base + 1))"
   fi
-  stage "$((stage_base + 1))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_POSTFIX"
-  stage "$((stage_base + 2))" || repack_target "$3" "${4:-}+$KDEDARK_VERSION_POSTFIX"
-  stage "$((stage_base + 3))" || repack_target "$3" "${4:-}+$FCITX5XWAYLAND_VERSION_POSTFIX"
-  stage "$((stage_base + 4))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_POSTFIX+$KDEDARK_VERSION_POSTFIX"
-  stage "$((stage_base + 5))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_POSTFIX+$FCITX5XWAYLAND_VERSION_POSTFIX"
-  stage "$((stage_base + 6))" || repack_target "$3" "${4:-}+$KDEDARK_VERSION_POSTFIX+$FCITX5XWAYLAND_VERSION_POSTFIX"
-  stage "$((stage_base + 7))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_POSTFIX+$KDEDARK_VERSION_POSTFIX+$FCITX5XWAYLAND_VERSION_POSTFIX"
+  stage "$((stage_base + 1))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX"
+  stage "$((stage_base + 2))" || repack_target "$3" "${4:-}+$KDEDARK_VERSION_SUFFIX"
+  stage "$((stage_base + 3))" || repack_target "$3" "${4:-}+$FCITX5XWAYLAND_VERSION_SUFFIX"
+  stage "$((stage_base + 4))" || repack_target "$3" "${4:-}+$BOLD_VERSION_SUFFIX"
+  stage "$((stage_base + 5))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX+$KDEDARK_VERSION_SUFFIX"
+  stage "$((stage_base + 6))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX+$FCITX5XWAYLAND_VERSION_SUFFIX"
+  stage "$((stage_base + 7))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX+$BOLD_VERSION_SUFFIX"
+  stage "$((stage_base + 8))" || repack_target "$3" "${4:-}+$KDEDARK_VERSION_SUFFIX+$FCITX5XWAYLAND_VERSION_SUFFIX"
+  stage "$((stage_base + 9))" || repack_target "$3" "${4:-}+$KDEDARK_VERSION_SUFFIX+$BOLD_VERSION_SUFFIX"
+  stage "$((stage_base + 10))" || repack_target "$3" "${4:-}+$FCITX5XWAYLAND_VERSION_SUFFIX+$BOLD_VERSION_SUFFIX"
+  stage "$((stage_base + 11))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX+$KDEDARK_VERSION_SUFFIX+$FCITX5XWAYLAND_VERSION_SUFFIX"
+  stage "$((stage_base + 12))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX+$KDEDARK_VERSION_SUFFIX+$BOLD_VERSION_SUFFIX"
+  stage "$((stage_base + 13))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX+$FCITX5XWAYLAND_VERSION_SUFFIX+$BOLD_VERSION_SUFFIX"
+  stage "$((stage_base + 14))" || repack_target "$3" "${4:-}+$KDEDARK_VERSION_SUFFIX+$FCITX5XWAYLAND_VERSION_SUFFIX+$BOLD_VERSION_SUFFIX"
+  stage "$((stage_base + 15))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX+$KDEDARK_VERSION_SUFFIX+$FCITX5XWAYLAND_VERSION_SUFFIX+$BOLD_VERSION_SUFFIX"
 }
 
 main() {
   ### $@: stage list
-  stage_per_task=7
+  stage_per_task=15
 
   stage_init "$@"
 
   load_source "$(stage -1)" || true # if stage -1 is specified, force fetch remote, otherwise use local
 
+  stage 0 || download_and_extract "$LIBFREETYPE6_DEB_URL" "$LIBFREETYPE6_DEB_FILE" "$EXTRACT_PATH_LIBFREETYPE6" &
+  stage 0 && pid_download_libfreetype6=0 || pid_download_libfreetype6=$!
   stage 0 || download_and_extract "$INT_DEB_URL" "$INT_DEB_FILE" "$EXTRACT_PATH_INT" &
   stage 0 && pid_download_int=0 || pid_download_int=$!
   stage 0 || download_and_extract "$CHN_DEB_URL" "$CHN_DEB_FILE" "$EXTRACT_PATH_CHN" &
   stage 0 && pid_download_chn=0 || pid_download_chn=$!
+
+  [ "$pid_download_libfreetype6" -eq 0 ] || wait "$pid_download_libfreetype6" || true
 
   # build INT packages immediately after INT deb is downloaded
   repack_task "$pid_download_int" 0 'INT' &
@@ -358,7 +389,7 @@ main() {
   stage 0 || wait "$pid_download_int" "$pid_download_chn"
 
   # build INT+mui packages immediately after INT & CHN deb is downloaded
-  repack_task 0 "$((stage_per_task * 2))" 'INT' "+$MUI_VERSION_POSTFIX" &
+  repack_task 0 "$((stage_per_task * 2))" 'INT' "+$MUI_VERSION_SUFFIX" &
 
   # wait for all tasks
   wait
