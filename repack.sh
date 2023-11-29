@@ -20,6 +20,7 @@ BIN_PATH='/usr/bin'
 REAL_BIN_PATH='/opt/kingsoft/wps-office/office6'
 L10N_PATH="$REAL_BIN_PATH/mui"
 TEMPLATES_PATH='/opt/kingsoft/wps-office/templates'
+CTRL_PATH='/DEBIAN'
 
 MUI_VERSION_SUFFIX='mui'
 PREFIXED_VERSION_SUFFIX='prefixed'
@@ -236,6 +237,7 @@ workaround_bold() {
   fi
   echo "Working around bold font in $1..."
   cp -al "$EXTRACT_PATH_LIBFREETYPE6/usr/lib/x86_64-linux-gnu"/* "$1$REAL_BIN_PATH/"
+  sed -i '/ks_check_library_version libfreetype.so.6/d' "$1$CTRL_PATH/postinst"
   echo "Worked around bold font in $1."
 }
 
