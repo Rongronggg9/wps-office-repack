@@ -50,7 +50,11 @@ load_source() {
     # INT: https://wdl1.pcfg.cache.wpscdn.com/wpsdl/wpsoffice/download/linux/11664/wps-office_11.1.0.11664.XA_amd64.deb
     echo 'Fetching latest version...'
     download_page=$(curl -sL 'https://linux.wps.cn')
-    CHN_DEB_URL=$(echo "$download_page" | grep -Po '(?<=href=").+?(?=".*Deb.*X64)')
+    CHN_DEB_URL=$(echo "$download_page" | grep -Po "(?<=['\"])http.+?_amd64.deb(?=['\"])" | sort -u)
+    if [ "$(echo "$CHN_DEB_URL" | wc -l)" -ne 1 ]; then
+      echo "Invalid CHN deb url! Aborting..."
+      exit 1
+    fi
     fetched=1
   fi
 
@@ -102,6 +106,14 @@ load_source() {
   INT_DEB_FILE="$DOWNLOAD_DIR/$INT_DEB_FILENAME"
   EXTRACT_PATH_CHN="$EXTRACT_DIR/$CHN_DEB_TRIPLE"
   EXTRACT_PATH_INT="$EXTRACT_DIR/$INT_DEB_TRIPLE"
+
+  # fix URL: https://aur.archlinux.org/cgit/aur.git/tree/PKGBUILD?h=wps-office-cn
+  uri="$(echo "$CHN_DEB_URL" | sed 's#https://wps-linux-personal.wpscdn.cn##')"
+  secrityKey='7f8faaaa468174dc1c9cd62e5f218a5b'
+  timestamp10=$(date '+%s')
+  md5hash=$(printf '%s%s%s' "$secrityKey" "$uri" "$timestamp10" | md5sum | cut -d' ' -f1)
+  CHN_DEB_URL="$CHN_DEB_URL?t=${timestamp10}&k=${md5hash%% *}"
+
   return $updated
 }
 
