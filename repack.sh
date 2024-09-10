@@ -266,7 +266,7 @@ build() {
   # inject version suffix
   sed -i "/^Version:/ s/$/$1/" "$2/DEBIAN/control"
   # build package
-  dpkg-deb --root-owner-group -b "$2/" "$BUILD_DIR"
+  dpkg-deb --root-owner-group -Zxz -z9 -b "$2/" "$BUILD_DIR"
 
   echo "Built $2."
 }
