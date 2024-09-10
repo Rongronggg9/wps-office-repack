@@ -324,7 +324,7 @@ stage_init() {
   STAGES="$*"
 }
 
-stage() {
+should_skip() {
   ### $1: stage
   ### RET: 0 if stage should be skipped, 1 otherwise
   ### Usage: stage $1 || cmd
@@ -356,40 +356,46 @@ repack_task() {
   [ "$1" -eq 0 ] || wait_task "$1" || true
   stage_base="$2"
   if [ -n "${4:-}" ]; then
-    stage "$((stage_base + 1))" || repack_target "$3" "${4:-}"
-    stage_base="$((stage_base + 1))"
+    should_skip "$((stage_base += 1))" || repack_target "$3" "${4:-}"
   fi
-  stage "$((stage_base + 1))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX"
-  stage "$((stage_base + 2))" || repack_target "$3" "${4:-}+$KDEDARK_VERSION_SUFFIX"
-  stage "$((stage_base + 3))" || repack_target "$3" "${4:-}+$FCITX5XWAYLAND_VERSION_SUFFIX"
-  stage "$((stage_base + 4))" || repack_target "$3" "${4:-}+$BOLD_VERSION_SUFFIX"
-  stage "$((stage_base + 5))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX+$KDEDARK_VERSION_SUFFIX"
-  stage "$((stage_base + 6))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX+$FCITX5XWAYLAND_VERSION_SUFFIX"
-  stage "$((stage_base + 7))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX+$BOLD_VERSION_SUFFIX"
-  stage "$((stage_base + 8))" || repack_target "$3" "${4:-}+$KDEDARK_VERSION_SUFFIX+$FCITX5XWAYLAND_VERSION_SUFFIX"
-  stage "$((stage_base + 9))" || repack_target "$3" "${4:-}+$KDEDARK_VERSION_SUFFIX+$BOLD_VERSION_SUFFIX"
-  stage "$((stage_base + 10))" || repack_target "$3" "${4:-}+$FCITX5XWAYLAND_VERSION_SUFFIX+$BOLD_VERSION_SUFFIX"
-  stage "$((stage_base + 11))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX+$KDEDARK_VERSION_SUFFIX+$FCITX5XWAYLAND_VERSION_SUFFIX"
-  stage "$((stage_base + 12))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX+$KDEDARK_VERSION_SUFFIX+$BOLD_VERSION_SUFFIX"
-  stage "$((stage_base + 13))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX+$FCITX5XWAYLAND_VERSION_SUFFIX+$BOLD_VERSION_SUFFIX"
-  stage "$((stage_base + 14))" || repack_target "$3" "${4:-}+$KDEDARK_VERSION_SUFFIX+$FCITX5XWAYLAND_VERSION_SUFFIX+$BOLD_VERSION_SUFFIX"
-  stage "$((stage_base + 15))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX+$KDEDARK_VERSION_SUFFIX+$FCITX5XWAYLAND_VERSION_SUFFIX+$BOLD_VERSION_SUFFIX"
+  should_skip "$((stage_base += 1))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX"
+  should_skip "$((stage_base += 1))" || repack_target "$3" "${4:-}+$KDEDARK_VERSION_SUFFIX"
+  should_skip "$((stage_base += 1))" || repack_target "$3" "${4:-}+$FCITX5XWAYLAND_VERSION_SUFFIX"
+  should_skip "$((stage_base += 1))" || repack_target "$3" "${4:-}+$BOLD_VERSION_SUFFIX"
+  should_skip "$((stage_base += 1))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX+$KDEDARK_VERSION_SUFFIX"
+  should_skip "$((stage_base += 1))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX+$FCITX5XWAYLAND_VERSION_SUFFIX"
+  should_skip "$((stage_base += 1))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX+$BOLD_VERSION_SUFFIX"
+  should_skip "$((stage_base += 1))" || repack_target "$3" "${4:-}+$KDEDARK_VERSION_SUFFIX+$FCITX5XWAYLAND_VERSION_SUFFIX"
+  should_skip "$((stage_base += 1))" || repack_target "$3" "${4:-}+$KDEDARK_VERSION_SUFFIX+$BOLD_VERSION_SUFFIX"
+  should_skip "$((stage_base += 1))" || repack_target "$3" "${4:-}+$FCITX5XWAYLAND_VERSION_SUFFIX+$BOLD_VERSION_SUFFIX"
+  should_skip "$((stage_base += 1))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX+$KDEDARK_VERSION_SUFFIX+$FCITX5XWAYLAND_VERSION_SUFFIX"
+  should_skip "$((stage_base += 1))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX+$KDEDARK_VERSION_SUFFIX+$BOLD_VERSION_SUFFIX"
+  should_skip "$((stage_base += 1))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX+$FCITX5XWAYLAND_VERSION_SUFFIX+$BOLD_VERSION_SUFFIX"
+  should_skip "$((stage_base += 1))" || repack_target "$3" "${4:-}+$KDEDARK_VERSION_SUFFIX+$FCITX5XWAYLAND_VERSION_SUFFIX+$BOLD_VERSION_SUFFIX"
+  should_skip "$((stage_base += 1))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX+$KDEDARK_VERSION_SUFFIX+$FCITX5XWAYLAND_VERSION_SUFFIX+$BOLD_VERSION_SUFFIX"
 }
 
 main() {
   ### $@: stage list
-  stage_per_task=15
+  stage_base=0
+  STAGES=0 repack_task 0 0 ''
+  stage_per_task="$stage_base"
+  stage_base=0
 
   stage_init "$@"
 
-  load_source "$(stage -1)" || true # if stage -1 is specified, force fetch remote, otherwise use local
+  if should_skip -1; then
+    load_source 0 || true  # use lock file
+  else
+    load_source 1 || true  # fetch remote version
+  fi
 
-  stage 0 || download_and_extract "$LIBFREETYPE6_DEB_URL" "$LIBFREETYPE6_DEB_FILE" "$EXTRACT_PATH_LIBFREETYPE6" &
-  stage 0 && pid_download_libfreetype6=0 || pid_download_libfreetype6=$!
-  stage 0 || download_and_extract "$INT_DEB_URL" "$INT_DEB_FILE" "$EXTRACT_PATH_INT" &
-  stage 0 && pid_download_int=0 || pid_download_int=$!
-  stage 0 || download_and_extract "$CHN_DEB_URL" "$CHN_DEB_FILE" "$EXTRACT_PATH_CHN" &
-  stage 0 && pid_download_chn=0 || pid_download_chn=$!
+  should_skip 0 || download_and_extract "$LIBFREETYPE6_DEB_URL" "$LIBFREETYPE6_DEB_FILE" "$EXTRACT_PATH_LIBFREETYPE6" &
+  should_skip 0 && pid_download_libfreetype6=0 || pid_download_libfreetype6=$!
+  should_skip 0 || download_and_extract "$INT_DEB_URL" "$INT_DEB_FILE" "$EXTRACT_PATH_INT" &
+  should_skip 0 && pid_download_int=0 || pid_download_int=$!
+  should_skip 0 || download_and_extract "$CHN_DEB_URL" "$CHN_DEB_FILE" "$EXTRACT_PATH_CHN" &
+  should_skip 0 && pid_download_chn=0 || pid_download_chn=$!
 
   [ "$pid_download_libfreetype6" -eq 0 ] || wait "$pid_download_libfreetype6" || true
 
@@ -400,7 +406,7 @@ main() {
   repack_task "$pid_download_chn" "$stage_per_task" 'CHN' &
 
   # wait for INT & CHN download to finish in order to build INT+mui packages
-  stage 0 || wait "$pid_download_int" "$pid_download_chn"
+  should_skip 0 || wait "$pid_download_int" "$pid_download_chn"
 
   # build INT+mui packages immediately after INT & CHN deb is downloaded
   repack_task 0 "$((stage_per_task * 2))" 'INT' "+$MUI_VERSION_SUFFIX" &
