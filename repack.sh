@@ -329,6 +329,7 @@ should_skip() {
   ### RET: 0 if stage should be skipped, 1 otherwise
   ### Usage: stage $1 || cmd
   if [ -z "$STAGES" ]; then
+    [ "$1" != '-0' ] || retrun 0
     return 1
   elif echo "$STAGES" | grep -Pq "(?<=^|\s)$1(?=\s|$)"; then
     return 1
@@ -358,21 +359,23 @@ repack_task() {
   if [ -n "${4:-}" ]; then
     should_skip "$((stage_base += 1))" || repack_target "$3" "${4:-}"
   fi
+  # KDEDARK: unneeded in v12
+  # BOLD: unneeded in v12, will cause crash
   should_skip "$((stage_base += 1))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX"
-  should_skip "$((stage_base += 1))" || repack_target "$3" "${4:-}+$KDEDARK_VERSION_SUFFIX"
+  should_skip -0 || repack_target "$3" "${4:-}+$KDEDARK_VERSION_SUFFIX"
   should_skip "$((stage_base += 1))" || repack_target "$3" "${4:-}+$FCITX5XWAYLAND_VERSION_SUFFIX"
-  should_skip "$((stage_base += 1))" || repack_target "$3" "${4:-}+$BOLD_VERSION_SUFFIX"
-  should_skip "$((stage_base += 1))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX+$KDEDARK_VERSION_SUFFIX"
+  should_skip -0 || repack_target "$3" "${4:-}+$BOLD_VERSION_SUFFIX"
+  should_skip -0 || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX+$KDEDARK_VERSION_SUFFIX"
   should_skip "$((stage_base += 1))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX+$FCITX5XWAYLAND_VERSION_SUFFIX"
-  should_skip "$((stage_base += 1))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX+$BOLD_VERSION_SUFFIX"
-  should_skip "$((stage_base += 1))" || repack_target "$3" "${4:-}+$KDEDARK_VERSION_SUFFIX+$FCITX5XWAYLAND_VERSION_SUFFIX"
-  should_skip "$((stage_base += 1))" || repack_target "$3" "${4:-}+$KDEDARK_VERSION_SUFFIX+$BOLD_VERSION_SUFFIX"
-  should_skip "$((stage_base += 1))" || repack_target "$3" "${4:-}+$FCITX5XWAYLAND_VERSION_SUFFIX+$BOLD_VERSION_SUFFIX"
-  should_skip "$((stage_base += 1))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX+$KDEDARK_VERSION_SUFFIX+$FCITX5XWAYLAND_VERSION_SUFFIX"
-  should_skip "$((stage_base += 1))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX+$KDEDARK_VERSION_SUFFIX+$BOLD_VERSION_SUFFIX"
-  should_skip "$((stage_base += 1))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX+$FCITX5XWAYLAND_VERSION_SUFFIX+$BOLD_VERSION_SUFFIX"
-  should_skip "$((stage_base += 1))" || repack_target "$3" "${4:-}+$KDEDARK_VERSION_SUFFIX+$FCITX5XWAYLAND_VERSION_SUFFIX+$BOLD_VERSION_SUFFIX"
-  should_skip "$((stage_base += 1))" || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX+$KDEDARK_VERSION_SUFFIX+$FCITX5XWAYLAND_VERSION_SUFFIX+$BOLD_VERSION_SUFFIX"
+  should_skip -0 || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX+$BOLD_VERSION_SUFFIX"
+  should_skip -0 || repack_target "$3" "${4:-}+$KDEDARK_VERSION_SUFFIX+$FCITX5XWAYLAND_VERSION_SUFFIX"
+  should_skip -0 || repack_target "$3" "${4:-}+$KDEDARK_VERSION_SUFFIX+$BOLD_VERSION_SUFFIX"
+  should_skip -0 || repack_target "$3" "${4:-}+$FCITX5XWAYLAND_VERSION_SUFFIX+$BOLD_VERSION_SUFFIX"
+  should_skip -0 || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX+$KDEDARK_VERSION_SUFFIX+$FCITX5XWAYLAND_VERSION_SUFFIX"
+  should_skip -0 || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX+$KDEDARK_VERSION_SUFFIX+$BOLD_VERSION_SUFFIX"
+  should_skip -0 || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX+$FCITX5XWAYLAND_VERSION_SUFFIX+$BOLD_VERSION_SUFFIX"
+  should_skip -0 || repack_target "$3" "${4:-}+$KDEDARK_VERSION_SUFFIX+$FCITX5XWAYLAND_VERSION_SUFFIX+$BOLD_VERSION_SUFFIX"
+  should_skip -0 || repack_target "$3" "${4:-}+$PREFIXED_VERSION_SUFFIX+$KDEDARK_VERSION_SUFFIX+$FCITX5XWAYLAND_VERSION_SUFFIX+$BOLD_VERSION_SUFFIX"
 }
 
 main() {
@@ -390,8 +393,8 @@ main() {
     load_source 1 || true  # fetch remote version
   fi
 
-  should_skip 0 || download_and_extract "$LIBFREETYPE6_DEB_URL" "$LIBFREETYPE6_DEB_FILE" "$EXTRACT_PATH_LIBFREETYPE6" &
-  should_skip 0 && pid_download_libfreetype6=0 || pid_download_libfreetype6=$!
+  should_skip -0 || download_and_extract "$LIBFREETYPE6_DEB_URL" "$LIBFREETYPE6_DEB_FILE" "$EXTRACT_PATH_LIBFREETYPE6" &
+  should_skip -0 && pid_download_libfreetype6=0 || pid_download_libfreetype6=$!
   should_skip 0 || download_and_extract "$INT_DEB_URL" "$INT_DEB_FILE" "$EXTRACT_PATH_INT" &
   should_skip 0 && pid_download_int=0 || pid_download_int=$!
   should_skip 0 || download_and_extract "$CHN_DEB_URL" "$CHN_DEB_FILE" "$EXTRACT_PATH_CHN" &
