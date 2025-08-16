@@ -47,6 +47,7 @@ load_source() {
     fetched=0
   else
     # CHN: https://wps-linux-personal.wpscdn.cn/wps/download/ep/Linux2019/11664/wps-office_11.1.0.11664_amd64.deb
+    # CHN: https://wps-linux-personal.wpscdn.cn/wps/download/ep/Linux2023/22570/wps-office_12.1.2.22570.AK.preread.sw_474164_amd64.deb
     # INT: https://wdl1.pcfg.cache.wpscdn.com/wpsdl/wpsoffice/download/linux/11664/wps-office_11.1.0.11664.XA_amd64.deb
     echo 'Fetching latest version...'
     download_page=$(curl -sL 'https://linux.wps.cn')
@@ -58,7 +59,7 @@ load_source() {
     fetched=1
   fi
 
-  LATEST_VERSION=$(echo "$CHN_DEB_URL" | grep -Po '(?<=_)[\d.]+(?=_)')
+  LATEST_VERSION=$(echo "$CHN_DEB_URL" | grep -Po '(?<=_)(\d+\.)+\d+(?=[_.])')
   LATEST_BUILD=$(echo "$LATEST_VERSION" | grep -Po '(?<=\.)\d+$')
   INT_DEB_URL="$INT_CDN/wpsdl/wpsoffice/download/linux/$LATEST_BUILD/wps-office_$LATEST_VERSION.XA_amd64.deb"
 
